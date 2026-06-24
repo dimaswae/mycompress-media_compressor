@@ -1,12 +1,15 @@
 import asyncio
 import logging
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes_health import router as health_router
+from app.api.routes_jobs import router as jobs_router
 from app.config import settings
 from app.infra.cleanup import sweep_expired_jobs
+from app.middleware.error_handler import register_error_handlers
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +23,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+register_error_handlers(app)
+
 app.include_router(health_router, prefix=settings.api_prefix)
+app.include_router(jobs_router, prefix=settings.api_prefix)
 
 
 @app.get("/")
@@ -42,7 +48,8 @@ async def _run_sweep_loop() -> None:
 
 @app.on_event("startup")
 async def startup() -> None:
-    """Register the background sweep loop on application start."""
+    """Create storage directory and register the background sweep loop."""
+    Path(settings.storage_dir).mkdir(parents=True, exist_ok=True)
     asyncio.create_task(_run_sweep_loop())
     logger.info(
         "Sweep scheduler registered (interval=%d min)",
