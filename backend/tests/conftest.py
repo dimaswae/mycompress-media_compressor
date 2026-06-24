@@ -10,9 +10,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
+from app.api.routes_audio import router as audio_router
 from app.api.routes_health import router as health_router
 from app.api.routes_image import router as image_router
 from app.api.routes_jobs import router as jobs_router
+from app.api.routes_video import router as video_router
 from app.config import settings
 from sqlalchemy.pool import StaticPool
 
@@ -60,9 +62,11 @@ def _make_app(db_session: Session, storage_dir: str) -> FastAPI:
     )
 
     register_error_handlers(app)
+    app.include_router(audio_router, prefix=settings.api_prefix)
     app.include_router(health_router, prefix=settings.api_prefix)
     app.include_router(image_router, prefix=settings.api_prefix)
     app.include_router(jobs_router, prefix=settings.api_prefix)
+    app.include_router(video_router, prefix=settings.api_prefix)
     app.dependency_overrides[get_db] = lambda: db_session
 
     return app
@@ -128,3 +132,57 @@ def sample_jpg_bytes() -> bytes:
     buf = BytesIO()
     img.save(buf, format="JPEG")
     return buf.getvalue()
+
+
+def _make_wav_bytes(
+    sample_rate: int = 8000,
+    duration_sec: float = 0.1,
+    n_channels: int = 1,
+    sampwidth: int = 2,
+) -> bytes:
+    """Generate a silent WAV file as bytes."""
+    import struct
+    import wave
+    from io import BytesIO
+
+    buf = BytesIO()
+    n_frames = int(sample_rate * duration_sec)
+    with wave.open(buf, "wb") as w:
+        w.setnchannels(n_channels)
+        w.setsampwidth(sampwidth)
+        w.setframerate(sample_rate)
+        w.writeframes(struct.pack(f"<{n_frames}h", *([0] * n_frames)))
+    return buf.getvalue()
+
+
+@pytest.fixture
+def sample_wav_bytes() -> bytes:
+    """Generate a small silent WAV file for testing."""
+    return _make_wav_bytes()
+
+
+@pytest.fixture
+def sample_mp3_bytes() -> bytes:
+    """Generate minimal bytes that pass MP3 magic-byte validation."""
+    return b"\xff\xfb\x90\x00\x00\x00\x00\x00"
+
+
+def _make_mp4_bytes(mdat_payload_size: int = 200) -> bytes:
+    """Generate a minimal MP4 byte string with a valid ftyp box and mdat box."""
+    import struct
+
+    ftyp_content = b"mp42\x00\x00\x00\x00mp42mp41"
+    ftyp_size = 8 + len(ftyp_content)
+    ftyp = struct.pack(">I", ftyp_size) + b"ftyp" + ftyp_content
+
+    mdat_payload = b"\x00" * mdat_payload_size
+    mdat_size = 8 + len(mdat_payload)
+    mdat = struct.pack(">I", mdat_size) + b"mdat" + mdat_payload
+
+    return ftyp + mdat
+
+
+@pytest.fixture
+def sample_mp4_bytes() -> bytes:
+    """Generate a minimal MP4 file that passes magic-byte validation."""
+    return _make_mp4_bytes()
