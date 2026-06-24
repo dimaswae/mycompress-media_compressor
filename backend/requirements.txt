@@ -1,0 +1,15 @@
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pydantic==2.11.1
+pydantic-settings==2.8.1
+python-multipart==0.0.20
+pillow==11.2.1
+opencv-python-headless==4.11.0.86
+numpy==2.2.5
+scikit-image==0.25.2
+cryptography==45.0.2
+pytest==8.3.5
+pytest-asyncio==0.25.3
+httpx2==2.4.0
+ruff==0.11.5
+black==25.1.0
