@@ -11,6 +11,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.api.routes_health import router as health_router
+from app.api.routes_image import router as image_router
 from app.api.routes_jobs import router as jobs_router
 from app.config import settings
 from sqlalchemy.pool import StaticPool
@@ -60,6 +61,7 @@ def _make_app(db_session: Session, storage_dir: str) -> FastAPI:
 
     register_error_handlers(app)
     app.include_router(health_router, prefix=settings.api_prefix)
+    app.include_router(image_router, prefix=settings.api_prefix)
     app.include_router(jobs_router, prefix=settings.api_prefix)
     app.dependency_overrides[get_db] = lambda: db_session
 
@@ -102,3 +104,27 @@ def sample_job(db_session: Session) -> dict:
     db_session.commit()
     db_session.refresh(job)
     return {"id": job.id, "status": job.status, "result_path": job.result_path}
+
+
+@pytest.fixture
+def sample_png_bytes() -> bytes:
+    """Generate a small 4×4 RGB PNG image as bytes."""
+    from io import BytesIO
+    from PIL import Image
+
+    img = Image.new("RGB", (4, 4), color=(128, 128, 128))
+    buf = BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@pytest.fixture
+def sample_jpg_bytes() -> bytes:
+    """Generate a small 4×4 RGB JPEG image as bytes."""
+    from io import BytesIO
+    from PIL import Image
+
+    img = Image.new("RGB", (4, 4), color=(128, 128, 128))
+    buf = BytesIO()
+    img.save(buf, format="JPEG")
+    return buf.getvalue()

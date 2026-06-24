@@ -13,6 +13,7 @@ from app.utils.exceptions import (
     CapacityExceededError,
     DecryptionError,
     FFmpegTimeoutError,
+    NotFoundError,
     StorageQuotaError,
     UnsupportedFormatError,
 )
@@ -21,6 +22,7 @@ _STATUS_MAP: dict[type[AppError], int] = {
     UnsupportedFormatError: 400,
     CapacityExceededError: 400,
     DecryptionError: 400,
+    NotFoundError: 404,
     FFmpegTimeoutError: 504,
     StorageQuotaError: 507,
 }
@@ -56,6 +58,12 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: FFmpegTimeoutError
     ) -> JSONResponse:
         return _build_response(504, exc)
+
+    @app.exception_handler(NotFoundError)
+    async def _handle_not_found(
+        request: Request, exc: NotFoundError
+    ) -> JSONResponse:
+        return _build_response(404, exc)
 
     @app.exception_handler(StorageQuotaError)
     async def _handle_storage_quota(

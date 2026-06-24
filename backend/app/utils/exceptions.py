@@ -43,3 +43,10 @@ class StorageQuotaError(AppError):
 
     def __init__(self, message: str = "Storage quota exceeded") -> None:
         super().__init__(code="STORAGE_QUOTA_EXCEEDED", message=message)
+
+
+class NotFoundError(AppError):
+    """Raised when a requested resource is not found."""
+
+    def __init__(self, message: str = "Resource not found") -> None:
+        super().__init__(code="NOT_FOUND", message=message)

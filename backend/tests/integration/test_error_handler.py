@@ -14,6 +14,7 @@ from app.utils.exceptions import (
     CapacityExceededError,
     DecryptionError,
     FFmpegTimeoutError,
+    NotFoundError,
     StorageQuotaError,
     UnsupportedFormatError,
 )
@@ -30,6 +31,7 @@ def _build_test_app() -> FastAPI:
             "CapacityExceededError": CapacityExceededError,
             "DecryptionError": DecryptionError,
             "FFmpegTimeoutError": FFmpegTimeoutError,
+            "NotFoundError": NotFoundError,
             "StorageQuotaError": StorageQuotaError,
         }
         exc_cls = factory.get(exc_name)
@@ -70,3 +72,8 @@ class TestErrorHandlerIntegration:
         resp = self.client.get("/raise/StorageQuotaError")
         assert resp.status_code == 507
         assert resp.json()["error"]["code"] == "STORAGE_QUOTA_EXCEEDED"
+
+    def test_not_found_returns_404(self) -> None:
+        resp = self.client.get("/raise/NotFoundError")
+        assert resp.status_code == 404
+        assert resp.json()["error"]["code"] == "NOT_FOUND"

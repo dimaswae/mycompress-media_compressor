@@ -1,6 +1,6 @@
 # TASKS.md — Granular Implementation Task Breakdown
 
-Role: Technical Project Manager. Source documents: `AGENTS.md`, `PROJECT_SPEC.md`, `FINAL_ARCHITECTURE.md`.
+Role: Technical Project Manager. Source documents: `AGENTS.md`, `PROJECT_SPEC.md`, `ARCHITECTURE.md`. `BACKEND_ARCHITECTURE.md`, `MILESTONE.md`, `ROADMAP_MVP.md`,  
 
 Rules applied:
 - Every task is sized to **< 2 hours** for one engineer.
