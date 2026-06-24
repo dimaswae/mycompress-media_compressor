@@ -8,6 +8,8 @@ opencv-python-headless==4.11.0.86
 numpy==2.2.5
 scikit-image==0.25.2
 cryptography==45.0.2
+sqlalchemy==2.0.39
+alembic==1.15.2
 pytest==8.3.5
 pytest-asyncio==0.25.3
 httpx2==2.4.0

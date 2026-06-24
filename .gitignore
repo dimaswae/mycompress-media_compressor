@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+mycompress.db
+
+# Node
+node_modules/
+dist/
+
+# Runtime
+storage/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
