@@ -16,33 +16,31 @@ class StegoCodec(ABC):
     """
 
     @abstractmethod
-    def capacity(self, image: Image.Image) -> int:
-        """Return the maximum number of bits that can be hidden in *image*."""
+    def capacity(self, carrier: Image.Image | bytes) -> int:
+        """Return the maximum number of bits that can be hidden."""
         ...
 
     @abstractmethod
-    def embed(self, image: Image.Image, message: bytes, password: str = "") -> Image.Image:
-        """Embed *message* into *image* and return a new image.
+    def embed(self, carrier: Image.Image | bytes, message: bytes) -> Image.Image | bytes:
+        """Embed *message* into *carrier* and return a new carrier.
 
-        The original *image* is not modified.
+        The original *carrier* is not modified.
 
         Args:
-            image: Carrier image (PIL ``Image``).
+            carrier: Carrier image (PIL ``Image``) or audio/video bytes.
             message: Bytes to hide.
-            password: Optional passphrase for basic obfuscation.
 
         Returns:
-            A new ``Image`` containing the hidden message.
+            A new carrier containing the hidden message.
         """
         ...
 
     @abstractmethod
-    def extract(self, image: Image.Image, password: str = "") -> bytes:
-        """Extract a hidden message from *image*.
+    def extract(self, carrier: Image.Image | bytes) -> bytes:
+        """Extract a hidden message from *carrier*.
 
         Args:
-            image: Stego image (PIL ``Image``).
-            password: Passphrase used during embedding.
+            carrier: Stego carrier (PIL ``Image`` or bytes).
 
         Returns:
             The hidden message as bytes.

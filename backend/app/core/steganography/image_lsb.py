@@ -4,11 +4,8 @@ Embeds a message into the LSB of each colour channel of every pixel.
 The message is prefixed with a 4-byte big-endian length so the decoder knows
 how many bytes to extract.
 
-If a *password* is provided, the payload is XOR-obfuscated with a key derived
-from SHA-256 of the password before embedding (and XOR-ed again on extraction).
+Note: Password-based obfuscation is now handled at the service layer via AES-GCM.
 """
-
-import hashlib
 
 import numpy as np
 from PIL import Image
@@ -22,13 +19,6 @@ class _LsbExtractError(AppError):
 
     def __init__(self, message: str = "Failed to extract message from image") -> None:
         super().__init__(code="LSB_EXTRACT_ERROR", message=message)
-
-
-def _xor_mask(password: str, length: int) -> bytes:
-    """Generate *length* bytes of XOR key from *password* via SHA-256."""
-    key = hashlib.sha256(password.encode("utf-8")).digest()
-    repeats = (length // len(key)) + 1
-    return (key * repeats)[:length]
 
 
 class LsbCodec(StegoCodec):
@@ -51,14 +41,14 @@ class LsbCodec(StegoCodec):
         w, h = image.size
         return w * h * 3  # one LSB per channel per pixel
 
-    def embed(self, image: Image.Image, message: bytes, password: str = "") -> Image.Image:
+    def embed(self, image: Image.Image, message: bytes) -> Image.Image:
         """Embed *message* into *image* and return a new image.
 
         The original *image* is not modified.
 
         Raises:
-            CapacityExceededError: If the message (plus 4-byte length prefix
-                and optional XOR overhead) exceeds the image's capacity.
+            CapacityExceededError: If the message (plus 4-byte length prefix)
+                exceeds the image's capacity.
         """
         if image.mode != "RGB":
             image = image.convert("RGB")
@@ -68,9 +58,6 @@ class LsbCodec(StegoCodec):
         # 4-byte big-endian length prefix
         length_bytes = len(message).to_bytes(4, "big")
         payload: bytes = length_bytes + message
-
-        if password:
-            payload = self._xor(payload, password)
 
         payload_bits_needed = len(payload) * 8
         if payload_bits_needed > total_capacity_bits:
@@ -92,7 +79,7 @@ class LsbCodec(StegoCodec):
         result_arr = flat.reshape(arr.shape)
         return Image.fromarray(result_arr, mode="RGB")
 
-    def extract(self, image: Image.Image, password: str = "") -> bytes:
+    def extract(self, image: Image.Image) -> bytes:
         """Extract a hidden message from *image*.
 
         Reads the 4-byte length prefix, then extracts *length* message bytes.
@@ -133,14 +120,6 @@ class LsbCodec(StegoCodec):
         usable_bits = (total_capacity_bits // 8) * 8  # round down to byte boundary
         raw_bytes = _bits_to_bytes(all_bits[:usable_bits])
 
-        # First 4 bytes are the length (possibly XOR-obfuscated)
-        # We'll extract all payload bytes and then process the length prefix
-        # after de-obfuscation.
-        # But de-obfuscation requires the full payload.  So extract all that
-        # we can, de-obfuscate, then check the length.
-        if password:
-            raw_bytes = self._xor(raw_bytes, password)
-
         if len(raw_bytes) < 4:
             raise _LsbExtractError("Truncated payload: missing length prefix")
 
@@ -159,13 +138,3 @@ class LsbCodec(StegoCodec):
             raise _LsbExtractError("Truncated payload: message body shorter than declared length")
 
         return raw_bytes[4 : 4 + msg_len]
-
-    # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    @staticmethod
-    def _xor(data: bytes, password: str) -> bytes:
-        """XOR *data* with a key derived from *password*."""
-        mask = _xor_mask(password, len(data))
-        return bytes(a ^ b for a, b in zip(data, mask))

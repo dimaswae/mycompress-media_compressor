@@ -145,7 +145,7 @@ class TestEmbedEndpoint:
         assert "hidden_capacity_bits" in body["metrics"]
 
     def test_embed_with_password(self, client: TestClient) -> None:
-        png = _make_test_png_bytes()
+        png = _make_test_png_bytes(size=32)  # Larger image for encrypted payload
         resp = client.post(
             "/api/v1/image/embed",
             files={"file": ("test.png", png, "image/png")},

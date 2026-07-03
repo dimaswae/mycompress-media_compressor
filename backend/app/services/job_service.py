@@ -65,6 +65,7 @@ def update_job_status(
     error_code: str | None = None,
     error_message: str | None = None,
     result_path: str | None = None,
+    salt: str | None = None,
 ) -> Job | None:
     """Update a job's status and optional fields.
 
@@ -78,4 +79,5 @@ def update_job_status(
         error_code=error_code,
         error_message=error_message,
         result_path=result_path,
+        salt=salt,
     )

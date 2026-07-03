@@ -1,4 +1,4 @@
-"""Integration tests for video endpoints (VID-10)."""
+"""Integration tests for video endpoints (VID-14)."""
 
 import struct
 from unittest.mock import patch
@@ -35,12 +35,12 @@ class TestCompressEndpoint:
                 files={"file": ("test.mp4", mp4, "video/mp4")},
                 data={"crf": "28"},
             )
-        assert resp.status_code == 200, resp.text
-        body = resp.json()
-        assert body["status"] == "done"
-        assert "job_id" in body
-        assert body["metrics"]["compression_ratio"] > 0
-        assert "processing_time_ms" in body["metrics"]
+            assert resp.status_code == 200, resp.text
+            body = resp.json()
+            assert body["status"] == "done"
+            assert "job_id" in body
+            assert body["metrics"]["compression_ratio"] > 0
+            assert "processing_time_ms" in body["metrics"]
 
     def test_compress_with_custom_crf(self, client: TestClient) -> None:
         mp4 = _make_mp4_bytes()
@@ -53,8 +53,8 @@ class TestCompressEndpoint:
                 files={"file": ("test.mp4", mp4, "video/mp4")},
                 data={"crf": "35"},
             )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["status"] == "done"
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["status"] == "done"
 
     def test_compress_invalid_extension_returns_400(self, client: TestClient) -> None:
         resp = client.post(
@@ -79,9 +79,9 @@ class TestDecompressEndpoint:
                 "/api/v1/video/decompress",
                 files={"file": ("video.mp4", mp4, "video/mp4")},
             )
-        assert resp.status_code == 200, resp.text
-        assert resp.json()["status"] == "done"
-        assert "processing_time_ms" in resp.json()["metrics"]
+            assert resp.status_code == 200, resp.text
+            assert resp.json()["status"] == "done"
+            assert "processing_time_ms" in resp.json()["metrics"]
 
     def test_decompress_failure_raises(self, client: TestClient) -> None:
         with patch("app.services.video_service.VideoCodec") as MockCodec:
@@ -112,7 +112,7 @@ class TestEmbedEndpoint:
         assert "hidden_capacity_bits" in body["metrics"]
 
     def test_embed_with_password(self, client: TestClient) -> None:
-        mp4 = _make_mp4_bytes()
+        mp4 = _make_mp4_bytes(mdat_payload_size=500)  # Larger for encrypted payload
         resp = client.post(
             "/api/v1/video/embed",
             files={"file": ("test.mp4", mp4, "video/mp4")},
@@ -168,7 +168,7 @@ class TestExtractEndpoint:
         assert ext_resp.json()["message"] == original_msg
 
     def test_extract_with_password(self, client: TestClient) -> None:
-        mp4 = _make_mp4_bytes()
+        mp4 = _make_mp4_bytes(mdat_payload_size=500)  # Larger for encrypted payload
         emb_resp = client.post(
             "/api/v1/video/embed",
             files={"file": ("test.mp4", mp4, "video/mp4")},
@@ -190,7 +190,7 @@ class TestExtractEndpoint:
         assert ext_resp.json()["message"] == "hidden"
 
     def test_extract_wrong_password_returns_400(self, client: TestClient) -> None:
-        mp4 = _make_mp4_bytes()
+        mp4 = _make_mp4_bytes(mdat_payload_size=500)  # Larger for encrypted payload
         emb_resp = client.post(
             "/api/v1/video/embed",
             files={"file": ("test.mp4", mp4, "video/mp4")},

@@ -5,7 +5,7 @@ import struct
 import pytest
 
 from app.core.steganography.video_lsb import VideoLsbCodec
-from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError
+from app.utils.exceptions import CapacityExceededError, UnsupportedFormatError
 
 
 def _make_mp4(mdat_payload_size: int = 200) -> bytes:
@@ -60,11 +60,6 @@ class TestVideoLsbCodecEmbed:
         with pytest.raises(CapacityExceededError):
             codec.embed(MP4_200, large_msg)
 
-    def test_embed_with_password(self) -> None:
-        codec = VideoLsbCodec()
-        result = codec.embed(MP4_200, b"secret", password="p@ss")
-        assert len(result) == len(MP4_200)
-
 
 class TestVideoLsbCodecExtract:
     def test_round_trip_no_password(self) -> None:
@@ -74,24 +69,11 @@ class TestVideoLsbCodecExtract:
         extracted = codec.extract(stego)
         assert extracted == msg
 
-    def test_round_trip_with_password(self) -> None:
-        codec = VideoLsbCodec()
-        msg = b"hidden message"
-        stego = codec.embed(MP4_200, msg, password="secret")
-        extracted = codec.extract(stego, password="secret")
-        assert extracted == msg
-
     def test_extract_empty_message(self) -> None:
         codec = VideoLsbCodec()
         stego = codec.embed(MP4_200, b"")
         extracted = codec.extract(stego)
         assert extracted == b""
-
-    def test_extract_wrong_password_raises(self) -> None:
-        codec = VideoLsbCodec()
-        stego = codec.embed(MP4_200, b"hello", password="correct")
-        with pytest.raises(AppError):
-            codec.extract(stego, password="wrong")
 
     def test_extract_raises_on_random_bytes(self) -> None:
         codec = VideoLsbCodec()

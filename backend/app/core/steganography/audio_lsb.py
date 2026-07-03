@@ -3,11 +3,9 @@
 Embeds a message into the LSB of each byte of the PCM sample data.
 The message is prefixed with a 4-byte big-endian length.
 
-If a *password* is provided, the payload is XOR-obfuscated with a key
-derived from SHA-256 of the password (same scheme as ``image_lsb``).
+Note: Password-based obfuscation is now handled at the service layer via AES-GCM.
 """
 
-import hashlib
 import struct
 
 from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError
@@ -18,13 +16,6 @@ class _AudioLsbExtractError(AppError):
 
     def __init__(self, message: str = "Failed to extract message from audio") -> None:
         super().__init__(code="AUDIO_LSB_EXTRACT_ERROR", message=message)
-
-
-def _xor_mask(password: str, length: int) -> bytes:
-    """Generate *length* bytes of XOR key from *password* via SHA-256."""
-    key = hashlib.sha256(password.encode("utf-8")).digest()
-    repeats = (length // len(key)) + 1
-    return (key * repeats)[:length]
 
 
 def _is_wav(data: bytes) -> bool:
@@ -73,9 +64,7 @@ class AudioLsbCodec:
         _offset, size = _find_data_chunk(wav_bytes)
         return size
 
-    def embed(
-        self, wav_bytes: bytes, message: bytes, password: str = ""
-    ) -> bytes:
+    def embed(self, wav_bytes: bytes, message: bytes) -> bytes:
         """Embed *message* into *wav_bytes* and return a new WAV byte string.
 
         Raises:
@@ -90,9 +79,6 @@ class AudioLsbCodec:
 
         length_bytes = len(message).to_bytes(4, "big")
         payload: bytes = length_bytes + message
-
-        if password:
-            payload = self._xor(payload, password)
 
         if len(payload) * 8 > total_bits:
             max_msg = (total_bits // 8) - 4
@@ -111,7 +97,7 @@ class AudioLsbCodec:
 
         return bytes(header) + bytes(pcm)
 
-    def extract(self, wav_bytes: bytes, password: str = "") -> bytes:
+    def extract(self, wav_bytes: bytes) -> bytes:
         """Extract a hidden message from *wav_bytes*.
 
         Raises:
@@ -140,9 +126,6 @@ class AudioLsbCodec:
             raw_bytes_list.append(byte_val)
         raw_bytes = bytes(raw_bytes_list)
 
-        if password:
-            raw_bytes = self._xor(raw_bytes, password)
-
         if len(raw_bytes) < 4:
             raise _AudioLsbExtractError("Truncated payload: missing length prefix")
 
@@ -164,9 +147,3 @@ class AudioLsbCodec:
             )
 
         return raw_bytes[4 : 4 + msg_len]
-
-    @staticmethod
-    def _xor(data: bytes, password: str) -> bytes:
-        """XOR *data* with a key derived from *password*."""
-        mask = _xor_mask(password, len(data))
-        return bytes(a ^ b for a, b in zip(data, mask))

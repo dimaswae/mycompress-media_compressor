@@ -7,7 +7,11 @@ from sqlalchemy.orm import Session
 from app.core.compression.audio_bitrate import AudioBitrateCodec
 from app.core.steganography.audio_lsb import AudioLsbCodec
 from app.core.metrics.common_metrics import compression_ratio, processing_time
-from app.infra.file_validation import validate_extension, validate_magic_bytes, validate_size
+from app.infra.file_validation import (
+    validate_extension,
+    validate_magic_bytes,
+    validate_size,
+)
 from app.infra.storage import load_file, save_result, save_upload
 from app.services.job_service import create_job, get_job_status, update_job_status
 from app.utils.exceptions import AppError, NotFoundError
@@ -18,9 +22,11 @@ _SENTINEL = 999.0
 def _sanitize(metrics: dict[str, float]) -> dict[str, float]:
     """Replace non-finite floats with sentinel values for JSON safety."""
     return {
-        k: _SENTINEL if v == float("inf") else
-           -_SENTINEL if v == float("-inf") else
-           0.0 if v != v else v
+        k: (
+            _SENTINEL
+            if v == float("inf")
+            else -_SENTINEL if v == float("-inf") else 0.0 if v != v else v
+        )
         for k, v in metrics.items()
     }
 
@@ -128,7 +134,9 @@ def decompress_audio(
         db.commit()
 
         codec = AudioBitrateCodec(bitrate=bitrate)
-        decompressed_bytes, decompress_ms = processing_time(codec.decompress, file_bytes)
+        decompressed_bytes, decompress_ms = processing_time(
+            codec.decompress, file_bytes
+        )
 
         result_ext = ".wav"
         result_path = save_result(job_id, result_ext, decompressed_bytes)
@@ -158,7 +166,11 @@ def embed_message(
     message: str,
     password: str = "",
 ) -> dict:
-    """Embed a secret message into a WAV audio file."""
+    """Embed a secret message into a WAV audio file.
+
+    If a password is provided, the message is encrypted with AES-GCM before
+    being embedded via LSB. The salt is stored in the job record.
+    """
     _validate_audio_file(file_bytes, filename)
 
     job = create_job(
@@ -180,14 +192,25 @@ def embed_message(
         db.commit()
 
         message_bytes = message.encode("utf-8")
+        salt_hex: str | None = None
+        if password:
+            from app.core.security.aes_cipher import encrypt_bytes
+
+            encrypted = encrypt_bytes(message_bytes, password)
+            salt_hex = encrypted[:16].hex()
+            message_bytes = encrypted
+
         codec = AudioLsbCodec()
-        result_bytes, embed_ms = processing_time(
-            codec.embed, file_bytes, message_bytes, password=password
-        )
+        result_bytes, embed_ms = processing_time(codec.embed, file_bytes, message_bytes)
         capacity = codec.capacity(file_bytes)
 
         result_path = save_result(job_id, ".wav", result_bytes)
-        update_job_status(db, job_id, status="done", result_path=result_path)
+        if salt_hex:
+            update_job_status(
+                db, job_id, status="done", result_path=result_path, salt=salt_hex
+            )
+        else:
+            update_job_status(db, job_id, status="done", result_path=result_path)
 
         raw_metrics: dict[str, float] = {
             "processing_time_ms": embed_ms,
@@ -215,7 +238,11 @@ def extract_message(
     filename: str,
     password: str = "",
 ) -> dict:
-    """Extract a hidden message from a stego WAV file."""
+    """Extract a hidden message from a stego WAV file.
+
+    If a password was used during embedding, the extracted payload is decrypted
+    using AES-GCM (salt and nonce are embedded in the payload).
+    """
     _validate_audio_file(file_bytes, filename)
 
     job = create_job(
@@ -237,16 +264,20 @@ def extract_message(
         db.commit()
 
         codec = AudioLsbCodec()
-        message_bytes, extract_ms = processing_time(
-            codec.extract, file_bytes, password=password
-        )
-        message_str = message_bytes.decode("utf-8", errors="replace")
+        extracted_bytes, extract_ms = processing_time(codec.extract, file_bytes)
+
+        if password:
+            from app.core.security.aes_cipher import decrypt_bytes
+
+            extracted_bytes = decrypt_bytes(extracted_bytes, password)
+
+        message_str = extracted_bytes.decode("utf-8", errors="replace")
 
         update_job_status(db, job_id, status="done")
 
         raw_metrics: dict[str, float] = {
             "processing_time_ms": extract_ms,
-            "extracted_message_size_bytes": float(len(message_bytes)),
+            "extracted_message_size_bytes": float(len(extracted_bytes)),
         }
         metrics = _sanitize(raw_metrics)
         _store_metrics(db, job_id, metrics)

@@ -185,4 +185,14 @@ def _make_mp4_bytes(mdat_payload_size: int = 200) -> bytes:
 @pytest.fixture
 def sample_mp4_bytes() -> bytes:
     """Generate a minimal MP4 file that passes magic-byte validation."""
-    return _make_mp4_bytes()
+    return _make_mp4_bytes(1024)  # Increased to fit encrypted messages
+
+
+@pytest.fixture
+def sample_video_fixture_bytes() -> bytes:
+    """Load the sample MP4 fixture file from tests/fixtures/."""
+    fixtures_dir = Path(__file__).parent / "fixtures"
+    fixture_path = fixtures_dir / "sample_video.mp4"
+    if fixture_path.exists():
+        return fixture_path.read_bytes()
+    return _make_mp4_bytes(10240)

@@ -1,11 +1,11 @@
-"""Unit tests for ``core/steganography/image_lsb.py`` (IMG-10, IMG-11, IMG-12, IMG-13)."""
+"""Unit tests for ``core/steganography/image_lsb.py`` (IMG-10, IMG-11, IMG-12)."""
 
 import numpy as np
 import pytest
 from PIL import Image
 
 from app.core.steganography.image_lsb import LsbCodec
-from app.utils.exceptions import AppError, CapacityExceededError
+from app.utils.exceptions import CapacityExceededError
 
 
 def _small_rgb(size: tuple[int, int] = (4, 4)) -> Image.Image:
@@ -52,12 +52,6 @@ class TestLsbEmbed:
         assert stego.size == original.size
         assert stego.mode == original.mode
 
-    def test_embed_with_password(self) -> None:
-        codec = LsbCodec()
-        original = _small_rgb((16, 16))
-        stego = codec.embed(original, b"secret", password="pass123")
-        assert stego.size == original.size
-
 
 class TestLsbExtract:
     def test_round_trip_no_password(self) -> None:
@@ -68,29 +62,12 @@ class TestLsbExtract:
         extracted = codec.extract(stego)
         assert extracted == message
 
-    def test_round_trip_with_password(self) -> None:
-        codec = LsbCodec()
-        original = _small_rgb((16, 16))
-        message = b"Password-protected message"
-        stego = codec.embed(original, message, password="s3cret!")
-        extracted = codec.extract(stego, password="s3cret!")
-        assert extracted == message
-
     def test_extract_empty_message(self) -> None:
         codec = LsbCodec()
         original = _small_rgb((4, 4))
         stego = codec.embed(original, b"")
         extracted = codec.extract(stego)
         assert extracted == b""
-
-    def test_extract_wrong_password_raises_error(self) -> None:
-        """Wrong password causes extract to raise an ``AppError``."""
-        codec = LsbCodec()
-        original = _small_rgb((16, 16))
-        message = b"secret data"
-        stego = codec.embed(original, message, password="correct")
-        with pytest.raises(AppError):
-            codec.extract(stego, password="wrong")
 
 
 class TestLsbCapacityExceeded:
@@ -106,11 +83,3 @@ class TestLsbCapacityExceeded:
 
         # Verify image was not corrupted
         assert np.array_equal(np.array(img), orig_arr)
-
-    def test_exception_is_app_error_subclass(self) -> None:
-        from app.utils.exceptions import AppError
-
-        codec = LsbCodec()
-        img = _small_rgb((4, 4))
-        with pytest.raises(AppError):
-            codec.embed(img, b"x" * 100)

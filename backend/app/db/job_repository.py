@@ -27,6 +27,7 @@ def update_job_status(
     error_code: str | None = None,
     error_message: str | None = None,
     result_path: str | None = None,
+    salt: str | None = None,
 ) -> Job | None:
     """Update a Job's status and optional error/result fields. Returns the updated Job or None."""
     job = get_job(db, job_id)
@@ -40,6 +41,8 @@ def update_job_status(
         job.error_message = error_message
     if result_path is not None:
         job.result_path = result_path
+    if salt is not None:
+        job.salt = salt
     db.commit()
     db.refresh(job)
     return job
