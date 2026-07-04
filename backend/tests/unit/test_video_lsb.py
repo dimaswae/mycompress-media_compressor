@@ -95,3 +95,64 @@ class TestVideoLsbCodecEdgeCases:
         msg = b"a" * 22
         with pytest.raises(CapacityExceededError):
             codec.embed(MP4_200, msg)
+
+
+class TestVideoLsbCodecRealVideo:
+    def test_real_video_roundtrip_and_decodability(
+        self, sample_video_fixture_bytes: bytes
+    ) -> None:
+        import os
+        import tempfile
+        import subprocess
+        import cv2
+        import numpy as np
+
+        codec = VideoLsbCodec()
+        
+        # Calculate dynamic capacity
+        cap = codec.capacity(sample_video_fixture_bytes)
+        
+        # Check if it is the real video (capacity should be large)
+        is_real = len(sample_video_fixture_bytes) > 20000
+        
+        msg = b"Real video stego test!"
+        stego = codec.embed(sample_video_fixture_bytes, msg)
+        extracted = codec.extract(stego)
+        assert extracted == msg
+        
+        if is_real:
+            # Check if stego video can be decoded by FFmpeg without error
+            with tempfile.TemporaryDirectory() as tmpdir:
+                path = os.path.join(tmpdir, "stego.mp4")
+                with open(path, "wb") as f:
+                    f.write(stego)
+                
+                cmd = ["ffmpeg", "-v", "error", "-i", path, "-f", "null", "-"]
+                res = subprocess.run(cmd, capture_output=True, text=True)
+                assert res.returncode == 0, f"FFmpeg decoding failed: {res.stderr}"
+                
+                # Check PSNR of I-frames
+                orig_path = os.path.join(tmpdir, "orig.mp4")
+                with open(orig_path, "wb") as f:
+                    f.write(sample_video_fixture_bytes)
+                    
+                from app.core.steganography.video_lsb import _get_iframe_indices, _extract_raw_frames
+                iframe_indices = _get_iframe_indices(orig_path)
+                
+                orig_frames, _, _, _ = _extract_raw_frames(orig_path)
+                stego_frames, _, _, _ = _extract_raw_frames(path)
+                
+                psnrs = []
+                for idx in iframe_indices:
+                    orig_f = orig_frames[idx].astype(np.float64)
+                    stego_f = stego_frames[idx].astype(np.float64)
+                    mse = np.mean((orig_f - stego_f) ** 2)
+                    if mse == 0:
+                        psnr = float("inf")
+                    else:
+                        psnr = 20 * np.log10(255.0 / np.sqrt(mse))
+                    psnrs.append(psnr)
+                
+                print(f"\n[TEST PSNR REPORT] Baseline PSNR for I-frames: {psnrs}")
+                for psnr in psnrs:
+                    assert psnr > 50.0 or psnr == float("inf")

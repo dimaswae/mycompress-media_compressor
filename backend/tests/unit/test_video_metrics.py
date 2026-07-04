@@ -18,29 +18,23 @@ from app.core.metrics.video_metrics import (
 
 class TestProbeVideoDimensions:
     def test_probe_success(self) -> None:
-        mock_proc = MagicMock(spec=subprocess.CompletedProcess)
-        mock_proc.returncode = 0
-        mock_proc.stdout = "640,480\n"
-
         with patch(
-            "app.core.metrics.video_metrics.subprocess.run", return_value=mock_proc
+            "app.core.metrics.video_metrics.run_ffmpeg", return_value="640,480\n"
         ):
             result = _probe_video_dimensions("/fake/path.mp4")
             assert result == (640, 480)
 
     def test_probe_failure_returncode(self) -> None:
-        mock_proc = MagicMock(spec=subprocess.CompletedProcess)
-        mock_proc.returncode = 1
-
         with patch(
-            "app.core.metrics.video_metrics.subprocess.run", return_value=mock_proc
+            "app.core.metrics.video_metrics.run_ffmpeg", side_effect=Exception("Failed")
         ):
             assert _probe_video_dimensions("/fake/path.mp4") is None
 
     def test_probe_timeout_returns_none(self) -> None:
+        from app.utils.exceptions import FFmpegTimeoutError
         with patch(
-            "app.core.metrics.video_metrics.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="ffprobe", timeout=30),
+            "app.core.metrics.video_metrics.run_ffmpeg",
+            side_effect=FFmpegTimeoutError("Timeout"),
         ):
             assert _probe_video_dimensions("/fake/path.mp4") is None
 
@@ -52,19 +46,19 @@ class TestExtractFrames:
         num_frames = 3
         fake_raw = b"\x80" * frame_bytes * num_frames
 
+        def mock_run_ffmpeg(args, timeout=None):
+            out_path = args[-1]
+            with open(out_path, "wb") as f:
+                f.write(fake_raw)
+            return ""
+
         with (
             patch(
                 "app.core.metrics.video_metrics._probe_video_dimensions",
                 return_value=(width, height),
             ),
-            patch("app.core.metrics.video_metrics.subprocess.run") as mock_run,
-            patch("app.core.metrics.video_metrics.os.unlink"),
+            patch("app.core.metrics.video_metrics.run_ffmpeg", side_effect=mock_run_ffmpeg),
         ):
-            mock_proc = MagicMock(spec=subprocess.CompletedProcess)
-            mock_proc.returncode = 0
-            mock_proc.stdout = fake_raw
-            mock_run.return_value = mock_proc
-
             frames = extract_frames(b"fake-mp4", max_frames=num_frames)
             assert len(frames) == num_frames
             for frame in frames:
@@ -85,13 +79,8 @@ class TestExtractFrames:
                 "app.core.metrics.video_metrics._probe_video_dimensions",
                 return_value=(4, 4),
             ),
-            patch("app.core.metrics.video_metrics.subprocess.run") as mock_run,
-            patch("app.core.metrics.video_metrics.os.unlink"),
+            patch("app.core.metrics.video_metrics.run_ffmpeg", side_effect=Exception("Error")),
         ):
-            mock_proc = MagicMock(spec=subprocess.CompletedProcess)
-            mock_proc.returncode = 1
-            mock_run.return_value = mock_proc
-
             frames = extract_frames(b"fake-mp4")
             assert frames == []
 
@@ -100,33 +89,33 @@ class TestExtractFrames:
         frame_bytes = width * height * 3
         fake_raw = b"\x80" * frame_bytes * 2  # only 2 complete frames
 
+        def mock_run_ffmpeg(args, timeout=None):
+            out_path = args[-1]
+            with open(out_path, "wb") as f:
+                f.write(fake_raw)
+            return ""
+
         with (
             patch(
                 "app.core.metrics.video_metrics._probe_video_dimensions",
                 return_value=(width, height),
             ),
-            patch("app.core.metrics.video_metrics.subprocess.run") as mock_run,
-            patch("app.core.metrics.video_metrics.os.unlink"),
+            patch("app.core.metrics.video_metrics.run_ffmpeg", side_effect=mock_run_ffmpeg),
         ):
-            mock_proc = MagicMock(spec=subprocess.CompletedProcess)
-            mock_proc.returncode = 0
-            mock_proc.stdout = fake_raw
-            mock_run.return_value = mock_proc
-
             frames = extract_frames(b"fake-mp4", max_frames=10)
             assert len(frames) == 2
 
     def test_extract_timeout_returns_empty(self) -> None:
+        from app.utils.exceptions import FFmpegTimeoutError
         with (
             patch(
                 "app.core.metrics.video_metrics._probe_video_dimensions",
                 return_value=(4, 4),
             ),
             patch(
-                "app.core.metrics.video_metrics.subprocess.run",
-                side_effect=subprocess.TimeoutExpired(cmd="ffmpeg", timeout=120),
+                "app.core.metrics.video_metrics.run_ffmpeg",
+                side_effect=FFmpegTimeoutError("Timeout"),
             ),
-            patch("app.core.metrics.video_metrics.os.unlink"),
         ):
             frames = extract_frames(b"fake-mp4")
             assert frames == []
@@ -179,3 +168,10 @@ class TestAverageMetric:
         assert -1 <= s <= 1
         m = mse([a], [b])
         assert m > 0
+
+    def test_mismatched_frame_shapes_raises_value_error(self) -> None:
+        a = np.zeros((8, 8, 3), dtype=np.uint8)
+        b = np.zeros((4, 4, 3), dtype=np.uint8)
+        with pytest.raises(ValueError):
+            psnr([a], [b])
+

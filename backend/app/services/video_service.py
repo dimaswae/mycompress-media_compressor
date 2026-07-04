@@ -12,9 +12,9 @@ from app.infra.file_validation import (
     validate_magic_bytes,
     validate_size,
 )
-from app.infra.storage import load_file, save_result, save_upload
+from app.infra.storage import load_file, save_result, save_upload, check_quota
 from app.services.job_service import create_job, get_job_status, update_job_status
-from app.utils.exceptions import AppError, NotFoundError
+from app.utils.exceptions import AppError, CapacityExceededError, DecryptionError, NotFoundError
 
 _SENTINEL = 999.0
 
@@ -73,6 +73,7 @@ def compress_video(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -127,6 +128,7 @@ def decompress_video(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -158,6 +160,47 @@ def decompress_video(
         raise
 
 
+def _calculate_stego_metrics(original_bytes: bytes, stego_bytes: bytes) -> dict[str, float]:
+    """Extract original vs stego I-frames and compute PSNR, SSIM, and MSE."""
+    import tempfile
+    import os
+    from app.core.steganography.video_lsb import _get_iframe_indices, _extract_raw_frames
+    from app.core.metrics import video_metrics
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        orig_path = os.path.join(tmpdir, "orig.mp4")
+        stego_path = os.path.join(tmpdir, "stego.mp4")
+
+        with open(orig_path, "wb") as f:
+            f.write(original_bytes)
+        with open(stego_path, "wb") as f:
+            f.write(stego_bytes)
+
+        try:
+            iframe_indices = _get_iframe_indices(orig_path)
+            orig_frames, _, _, _ = _extract_raw_frames(orig_path)
+            stego_frames, _, _, _ = _extract_raw_frames(stego_path)
+
+            orig_iframes = [orig_frames[i] for i in iframe_indices if i < len(orig_frames)]
+            stego_iframes = [stego_frames[i] for i in iframe_indices if i < len(stego_frames)]
+
+            psnr_val = video_metrics.psnr(orig_iframes, stego_iframes)
+            ssim_val = video_metrics.ssim(orig_iframes, stego_iframes)
+            mse_val = video_metrics.mse(orig_iframes, stego_iframes)
+
+            return {
+                "psnr": psnr_val,
+                "ssim": ssim_val,
+                "mse": mse_val
+            }
+        except Exception:
+            return {
+                "psnr": 0.0,
+                "ssim": 0.0,
+                "mse": 0.0
+            }
+
+
 def embed_message(
     db: Session,
     file_bytes: bytes,
@@ -185,6 +228,7 @@ def embed_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -197,12 +241,21 @@ def embed_message(
 
             encrypted = encrypt_bytes(message_bytes, password)
             salt_hex = encrypted[:16].hex()
-            message_bytes = encrypted
+            message_bytes = b"\x01" + encrypted
+        else:
+            message_bytes = b"\x00" + message_bytes
 
         codec = VideoLsbCodec()
-        result_bytes, embed_ms = processing_time(codec.embed, file_bytes, message_bytes)
         capacity = codec.capacity(file_bytes)
+        payload_bits_needed = (len(message_bytes) + 4) * 8
+        if payload_bits_needed > capacity:
+            max_msg = (capacity // 8) - 5
+            raise CapacityExceededError(
+                f"Message size {len(message)} characters exceeds maximum of "
+                f"{max_msg} bytes (capacity = {capacity} bits)"
+            )
 
+        result_bytes, embed_ms = processing_time(codec.embed, file_bytes, message_bytes)
         result_path = save_result(job_id, ".mp4", result_bytes)
         if salt_hex:
             update_job_status(
@@ -211,9 +264,16 @@ def embed_message(
         else:
             update_job_status(db, job_id, status="done", result_path=result_path)
 
+        stego_metrics = _calculate_stego_metrics(file_bytes, result_bytes)
+        comp_ratio = len(result_bytes) / len(file_bytes)
+
         raw_metrics: dict[str, float] = {
             "processing_time_ms": embed_ms,
-            "hidden_capacity_bits": float(capacity),
+            "hidden_capacity_bits": float(capacity - 8),
+            "psnr": stego_metrics["psnr"],
+            "ssim": stego_metrics["ssim"],
+            "mse": stego_metrics["mse"],
+            "compression_ratio": comp_ratio,
         }
         metrics = _sanitize(raw_metrics)
         _store_metrics(db, job_id, metrics)
@@ -229,6 +289,7 @@ def embed_message(
             error_message="Message embedding failed",
         )
         raise
+
 
 
 def extract_message(
@@ -257,6 +318,7 @@ def extract_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -265,12 +327,21 @@ def extract_message(
         codec = VideoLsbCodec()
         extracted_bytes, extract_ms = processing_time(codec.extract, file_bytes)
 
-        if password:
+        if not extracted_bytes:
+            raise DecryptionError("Extracted payload is empty or invalid")
+
+        is_encrypted = extracted_bytes[0] == 1
+        payload_bytes = extracted_bytes[1:]
+
+        if is_encrypted and not password:
+            raise DecryptionError("Message is encrypted, password is required")
+
+        if is_encrypted:
             from app.core.security.aes_cipher import decrypt_bytes
 
-            extracted_bytes = decrypt_bytes(extracted_bytes, password)
+            payload_bytes = decrypt_bytes(payload_bytes, password)
 
-        message_str = extracted_bytes.decode("utf-8", errors="replace")
+        message_str = payload_bytes.decode("utf-8")
 
         update_job_status(db, job_id, status="done")
 

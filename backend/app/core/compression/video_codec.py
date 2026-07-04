@@ -24,10 +24,21 @@ class VideoCodec(CompressionCodec):
 
     def compress(self, data: bytes) -> bytes:
         """Re-encode MP4 bytes at the configured CRF (lower quality, smaller size)."""
+        # TODO: The route layer currently loads the entire video file into RAM (via UploadFile.read()).
+        # In a future iteration, the API and service layers should be refactored to work with file paths
+        # or streams (e.g. streaming chunks from client directly to disk) to avoid OOM for very large files.
+        #
+        # For now, to minimize memory duplication during disk write, we write in chunks using a memoryview.
         with tempfile.TemporaryDirectory() as tmpdir:
             in_path = Path(tmpdir) / "input.mp4"
             out_path = Path(tmpdir) / "output.mp4"
-            in_path.write_bytes(data)
+            
+            chunk_size = 64 * 1024  # 64KB
+            mv = memoryview(data)
+            with open(in_path, "wb") as f:
+                for i in range(0, len(mv), chunk_size):
+                    f.write(mv[i : i + chunk_size])
+
             try:
                 run_ffmpeg(
                     [
@@ -50,14 +61,32 @@ class VideoCodec(CompressionCodec):
                     code="VIDEO_COMPRESS_ERROR",
                     message="FFmpeg did not produce an output file",
                 )
-            return out_path.read_bytes()
+            
+            # Since the CompressionCodec interface requires returning bytes, loading the file to memory
+            # is required here. We read it in chunks to avoid large single-read allocations.
+            out_bytes = bytearray()
+            with open(out_path, "rb") as f:
+                while chunk := f.read(64 * 1024):
+                    out_bytes.extend(chunk)
+            return bytes(out_bytes)
 
     def decompress(self, data: bytes) -> bytes:
         """Re-encode MP4 bytes at a higher quality (CRF 18)."""
+        # TODO: The route layer currently loads the entire video file into RAM (via UploadFile.read()).
+        # In a future iteration, the API and service layers should be refactored to work with file paths
+        # or streams (e.g. streaming chunks from client directly to disk) to avoid OOM for very large files.
+        #
+        # For now, to minimize memory duplication during disk write, we write in chunks using a memoryview.
         with tempfile.TemporaryDirectory() as tmpdir:
             in_path = Path(tmpdir) / "input.mp4"
             out_path = Path(tmpdir) / "output.mp4"
-            in_path.write_bytes(data)
+            
+            chunk_size = 64 * 1024  # 64KB
+            mv = memoryview(data)
+            with open(in_path, "wb") as f:
+                for i in range(0, len(mv), chunk_size):
+                    f.write(mv[i : i + chunk_size])
+
             try:
                 run_ffmpeg(
                     [
@@ -80,4 +109,11 @@ class VideoCodec(CompressionCodec):
                     code="VIDEO_DECOMPRESS_ERROR",
                     message="FFmpeg did not produce an output file",
                 )
-            return out_path.read_bytes()
+            
+            # Since the CompressionCodec interface requires returning bytes, loading the file to memory
+            # is required here. We read it in chunks to avoid large single-read allocations.
+            out_bytes = bytearray()
+            with open(out_path, "rb") as f:
+                while chunk := f.read(64 * 1024):
+                    out_bytes.extend(chunk)
+            return bytes(out_bytes)

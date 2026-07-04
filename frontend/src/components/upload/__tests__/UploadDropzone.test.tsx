@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest"
 import { render, screen, fireEvent } from "@testing-library/react"
-import { UploadDropzone } from "../UploadDropzone"
+import { UploadDropzone } from "../UploadDropzoneNew"
 
 describe("UploadDropzone", () => {
   it("renders dropzone text", () => {

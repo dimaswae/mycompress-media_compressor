@@ -181,6 +181,17 @@ class TestEmbedEndpoint:
         )
         assert resp.status_code == 400, resp.text
 
+    def test_embed_corrupt_image_data_returns_400(self, client: TestClient) -> None:
+        # A file with valid PNG signature but corrupt content
+        corrupt_png = b"\x89PNG\r\n\x1a\n" + b"some corrupt garbage here"
+        resp = client.post(
+            "/api/v1/image/embed",
+            files={"file": ("test.png", corrupt_png, "image/png")},
+            data={"message": "secret message", "password": "", "algorithm": ""},
+        )
+        assert resp.status_code == 400, resp.text
+        assert "INVALID_IMAGE" in resp.text
+
 
 # ────────────────────────────── extract ──────────────────────────────
 
@@ -261,6 +272,18 @@ class TestExtractEndpoint:
         )
         # clean image has random LSBs — may return empty (200) or raise (400)
         assert ext_resp.status_code in (200, 400), ext_resp.text
+
+    def test_extract_corrupt_image_data_returns_400(self, client: TestClient) -> None:
+        # A file with valid PNG signature but corrupt content
+        corrupt_png = b"\x89PNG\r\n\x1a\n" + b"some corrupt garbage here"
+        resp = client.post(
+            "/api/v1/image/extract",
+            files={"file": ("test.png", corrupt_png, "image/png")},
+            data={"password": "", "algorithm": ""},
+        )
+        assert resp.status_code == 400, resp.text
+        assert "INVALID_IMAGE" in resp.text
+
 
 
 # ────────────────────────────── compare ──────────────────────────────

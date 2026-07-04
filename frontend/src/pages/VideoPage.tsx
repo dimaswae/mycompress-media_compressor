@@ -1,5 +1,5 @@
-import React, { useState } from "react"
-import { UploadDropzone } from "../components/upload/UploadDropzone"
+import { useState } from "react"
+import { UploadDropzone } from "../components/upload/UploadDropzoneNew"
 import { Button } from "../components/common/Button"
 import { MessageInput } from "../components/stego/MessageInput"
 import { EncryptionToggle } from "../components/stego/EncryptionToggle"
@@ -7,7 +7,7 @@ import { useFileUpload } from "../hooks/useFileUpload"
 import { useJobPolling } from "../hooks/useJobPolling"
 import * as videoApi from "../api/videoApi"
 import { ErrorBanner } from "../components/common/ErrorBanner"
-import { LoadingSpinner } from "../components/common/LoadingSpinner"
+import { UploadProgress } from "../components/upload/UploadProgressNew"
 
 export function VideoPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -17,13 +17,13 @@ export function VideoPage() {
   const [crf, setCrf] = useState(28)
   const [jobId, setJobId] = useState<string | null>(null)
 
-  const { upload, isUploading } = useFileUpload()
-  const { status, job, error } = useJobPolling(jobId || "")
+  const { upload, progress, isUploading, error: uploadError } = useFileUpload()
+  const { status, job, error: pollingError } = useJobPolling(jobId || "")
 
   const handleUpload = async () => {
     if (!selectedFile) return
-    const result = await upload(() =>
-      videoApi.embedMessage(selectedFile, message, encryptEnabled ? password : undefined)
+    const result = await upload((onProgress) =>
+      videoApi.embedMessage(selectedFile, message, encryptEnabled ? password : undefined, onProgress)
     )
     if (result?.job_id) setJobId(result.job_id)
   }
@@ -55,11 +55,17 @@ export function VideoPage() {
           />
         </label>
 
-        <Button onClick={handleUpload} disabled={!selectedFile || isUploading}>
-          {isUploading ? <LoadingSpinner /> : "Embed Message"}
+        <Button onClick={handleUpload} disabled={!selectedFile || isUploading} isLoading={isUploading}>
+          Embed Message
         </Button>
 
-        {error && <ErrorBanner message={error} />}
+        {(uploadError || pollingError) && <ErrorBanner message={uploadError || pollingError || "Unknown error"} />}
+
+        {(isUploading || progress > 0) && (
+          <div className="mt-2">
+            <UploadProgress percent={progress} />
+          </div>
+        )}
 
         {status && (
           <div className="mt-4 p-4 bg-gray-800 rounded">

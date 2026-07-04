@@ -5,13 +5,13 @@ them frame-by-frame using scikit-image metric functions.
 """
 
 import os
-import subprocess
 import tempfile
 from collections.abc import Callable, Sequence
 
 import numpy as np
 
 from app.config import settings
+from app.infra.ffmpeg_runner import run_ffmpeg
 
 _FFMPEG_TIMEOUT = settings.ffmpeg_timeout_seconds
 _MAX_FRAMES = 30
@@ -23,7 +23,7 @@ def _probe_video_dimensions(video_path: str) -> tuple[int, int] | None:
     Returns ``(width, height)`` or ``None`` if probing fails.
     """
     try:
-        probe = subprocess.run(
+        stdout = run_ffmpeg(
             [
                 "ffprobe",
                 "-v",
@@ -36,17 +36,13 @@ def _probe_video_dimensions(video_path: str) -> tuple[int, int] | None:
                 "csv=p=0",
                 video_path,
             ],
-            capture_output=True,
-            text=True,
             timeout=30,
         )
-        if probe.returncode != 0:
-            return None
-        parts = probe.stdout.strip().split(",")
+        parts = stdout.strip().split(",")
         if len(parts) < 2:
             return None
         return int(parts[0]), int(parts[1])
-    except (ValueError, OSError, subprocess.TimeoutExpired):
+    except Exception:
         return None
 
 
@@ -65,60 +61,60 @@ def extract_frames(
     Returns:
         List of RGB frame arrays. May be empty if decoding fails.
     """
-    with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-        f.write(video_bytes)
-        video_path = f.name
+    with tempfile.TemporaryDirectory() as tmpdir:
+        video_path = os.path.join(tmpdir, "input.mp4")
+        raw_bin_path = os.path.join(tmpdir, "output.bin")
 
-    try:
-        dims = _probe_video_dimensions(video_path)
-        if dims is None:
-            return []
-        width, height = dims
+        with open(video_path, "wb") as f:
+            f.write(video_bytes)
 
-        proc = subprocess.run(
-            [
-                "ffmpeg",
-                "-y",
-                "-i",
-                video_path,
-                "-f",
-                "rawvideo",
-                "-pix_fmt",
-                "rgb24",
-                "-vframes",
-                str(max_frames),
-                "-s",
-                f"{width}x{height}",
-                "-",
-            ],
-            capture_output=True,
-            timeout=_FFMPEG_TIMEOUT,
-        )
-        if proc.returncode != 0:
-            return []
-
-        raw_data = proc.stdout
-        frame_bytes = width * height * 3
-        frames: list[np.ndarray] = []
-        for i in range(max_frames):
-            offset = i * frame_bytes
-            if offset + frame_bytes > len(raw_data):
-                break
-            frame = np.frombuffer(
-                raw_data[offset : offset + frame_bytes], dtype=np.uint8
-            )
-            frame = frame.reshape((height, width, 3))
-            frames.append(frame)
-
-        return frames
-
-    except (OSError, subprocess.TimeoutExpired):
-        return []
-    finally:
         try:
-            os.unlink(video_path)
-        except OSError:
-            pass
+            dims = _probe_video_dimensions(video_path)
+            if dims is None:
+                return []
+            width, height = dims
+
+            run_ffmpeg(
+                [
+                    "ffmpeg",
+                    "-y",
+                    "-i",
+                    video_path,
+                    "-f",
+                    "rawvideo",
+                    "-pix_fmt",
+                    "rgb24",
+                    "-vframes",
+                    str(max_frames),
+                    "-s",
+                    f"{width}x{height}",
+                    raw_bin_path,
+                ],
+                timeout=_FFMPEG_TIMEOUT,
+            )
+
+            if not os.path.exists(raw_bin_path):
+                return []
+
+            with open(raw_bin_path, "rb") as f:
+                raw_data = f.read()
+
+            frame_bytes = width * height * 3
+            frames: list[np.ndarray] = []
+            for i in range(max_frames):
+                offset = i * frame_bytes
+                if offset + frame_bytes > len(raw_data):
+                    break
+                frame = np.frombuffer(
+                    raw_data[offset : offset + frame_bytes], dtype=np.uint8
+                )
+                frame = frame.reshape((height, width, 3))
+                frames.append(frame)
+
+            return frames
+
+        except Exception:
+            return []
 
 
 def _average_metric(
@@ -135,6 +131,9 @@ def _average_metric(
     n = min(len(original_frames), len(processed_frames))
     if n == 0:
         return 0.0
+    for i in range(n):
+        if original_frames[i].shape != processed_frames[i].shape:
+            raise ValueError("Original and processed frames must have the same shape")
     values: list[float] = []
     for i in range(n):
         try:

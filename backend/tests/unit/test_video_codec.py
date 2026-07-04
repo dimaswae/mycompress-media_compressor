@@ -1,6 +1,6 @@
 """Unit tests for core/compression/video_codec.py (VID-01/02)."""
 
-from unittest.mock import patch
+from unittest.mock import patch, mock_open
 
 import pytest
 
@@ -14,11 +14,7 @@ class TestVideoCodec:
         with (
             patch("app.core.compression.video_codec.run_ffmpeg") as mock_run,
             patch("app.core.compression.video_codec.Path.exists", return_value=True),
-            patch(
-                "app.core.compression.video_codec.Path.read_bytes",
-                return_value=b"fake-compressed",
-            ),
-            patch("app.core.compression.video_codec.Path.write_bytes"),
+            patch("builtins.open", mock_open(read_data=b"fake-compressed")),
         ):
             result = codec.compress(b"fake-video-data")
             assert result == b"fake-compressed"
@@ -32,11 +28,7 @@ class TestVideoCodec:
         with (
             patch("app.core.compression.video_codec.run_ffmpeg") as mock_run,
             patch("app.core.compression.video_codec.Path.exists", return_value=True),
-            patch(
-                "app.core.compression.video_codec.Path.read_bytes",
-                return_value=b"fake-decompressed",
-            ),
-            patch("app.core.compression.video_codec.Path.write_bytes"),
+            patch("builtins.open", mock_open(read_data=b"fake-decompressed")),
         ):
             result = codec.decompress(b"fake-compressed")
             assert result == b"fake-decompressed"
@@ -50,11 +42,7 @@ class TestVideoCodec:
         with (
             patch("app.core.compression.video_codec.run_ffmpeg") as mock_run,
             patch("app.core.compression.video_codec.Path.exists", return_value=True),
-            patch(
-                "app.core.compression.video_codec.Path.read_bytes",
-                return_value=b"data",
-            ),
-            patch("app.core.compression.video_codec.Path.write_bytes"),
+            patch("builtins.open", mock_open(read_data=b"data")),
         ):
             codec.compress(b"data")
             args = mock_run.call_args[0][0]
@@ -88,3 +76,37 @@ class TestVideoCodec:
             ):
                 with pytest.raises(AppError, match="did not produce"):
                     codec.compress(b"some-data")
+
+    def test_compress_chunked_read_write(self) -> None:
+        codec = VideoCodec(crf=28)
+        
+        # 150 KB input data
+        input_data = b"x" * (150 * 1024)
+        
+        # Prepare mock open that returns 100 KB data
+        m_open = mock_open(read_data=b"y" * (100 * 1024))
+        
+        with (
+            patch("app.core.compression.video_codec.run_ffmpeg"),
+            patch("app.core.compression.video_codec.Path.exists", return_value=True),
+            patch("builtins.open", m_open),
+        ):
+            result = codec.compress(input_data)
+            
+            # Verify result output
+            assert result == b"y" * (100 * 1024)
+            
+            # Verify writing was chunked (64KB chunks)
+            # We expect 3 write calls for 150KB: 64KB, 64KB, 22KB
+            write_mock = m_open().write
+            assert write_mock.call_count == 3
+            write_mock.assert_any_call(b"x" * (64 * 1024))
+            write_mock.assert_any_call(b"x" * (22 * 1024))
+
+            # Verify reading was chunked (64KB chunks)
+            read_mock = m_open().read
+            # mock_open's read behavior: returns the whole read_data if read() is called,
+            # but if read(size) is called, it returns chunk by chunk if configured or mock_open handles it.
+            # We assert read_mock was called with 64KB.
+            read_mock.assert_any_call(64 * 1024)
+

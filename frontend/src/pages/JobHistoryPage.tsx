@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react"
+import { useEffect, useState } from "react"
 import { JobStatusBadge } from "../components/jobs/JobStatusBadge"
 import * as jobsApi from "../api/jobsApi"
 import type { JobStatusResponse } from "../types/job"

@@ -3,7 +3,25 @@
 from io import BytesIO
 from pathlib import Path
 
+from typing import TypedDict
+
 import numpy as np
+
+class ImageJobDict(TypedDict):
+    job_id: str
+    status: str
+    metrics: dict[str, float]
+
+class ImageExtractDict(TypedDict):
+    job_id: str
+    message: str
+    metrics: dict[str, float]
+
+class ImageCompareDict(TypedDict):
+    job_id: str
+    original_size: int
+    result_size: int
+    metrics: dict[str, float]
 from PIL import Image
 from sqlalchemy.orm import Session
 
@@ -17,23 +35,12 @@ from app.infra.file_validation import (
     validate_magic_bytes,
     validate_size,
 )
-from app.infra.storage import load_file, save_result, save_upload
+from app.infra.storage import load_file, save_result, save_upload, check_quota
 from app.services.job_service import create_job, get_job_status, update_job_status
 from app.utils.exceptions import AppError, NotFoundError
+from app.utils.service_helpers import sanitize_metrics, store_job_metrics, validate_size_only
 
-_SENTINEL = 999.0
 
-
-def _sanitize(metrics: dict[str, float]) -> dict[str, float]:
-    """Replace non-finite floats with sentinel values for JSON safety."""
-    return {
-        k: (
-            _SENTINEL
-            if v == float("inf")
-            else -_SENTINEL if v == float("-inf") else 0.0 if v != v else v
-        )
-        for k, v in metrics.items()
-    }
 
 
 def _validate_image_file(file_bytes: bytes, filename: str) -> str:
@@ -44,17 +51,20 @@ def _validate_image_file(file_bytes: bytes, filename: str) -> str:
     return ext
 
 
-def _validate_size_only(file_bytes: bytes) -> None:
-    """Validate only the file size (skip extension/magic checks)."""
-    validate_size(file_bytes)
-
 
 def _compute_image_metrics(
     original_bytes: bytes, result_bytes: bytes
 ) -> dict[str, float]:
     """Compute PSNR, SSIM, MSE between two image byte buffers."""
-    original_img = Image.open(BytesIO(original_bytes)).convert("RGB")
-    result_img = Image.open(BytesIO(result_bytes)).convert("RGB")
+    try:
+        original_img = Image.open(BytesIO(original_bytes)).convert("RGB")
+        original_img.load()
+        result_img = Image.open(BytesIO(result_bytes)).convert("RGB")
+        result_img.load()
+    except (Image.UnidentifiedImageError, OSError, ValueError, TypeError) as e:
+        from app.utils.exceptions import InvalidImageError
+        raise InvalidImageError(f"Invalid or corrupt image data for comparison: {str(e)}")
+
     orig_arr = np.array(original_img, dtype=np.uint8)
     res_arr = np.array(result_img, dtype=np.uint8)
     raw = {
@@ -62,13 +72,7 @@ def _compute_image_metrics(
         "ssim": ssim(orig_arr, res_arr),
         "mse": mse(orig_arr, res_arr),
     }
-    return _sanitize(raw)
-
-
-def _store_metrics(db: Session, job_id: str, metrics: dict[str, float]) -> None:
-    """Persist a sanitized dictionary of metric_name → value."""
-    for name, value in _sanitize(metrics).items():
-        add_metric(db, job_id, name, value)
+    return sanitize_metrics(raw)
 
 
 def compress_image(
@@ -76,7 +80,7 @@ def compress_image(
     file_bytes: bytes,
     filename: str,
     algorithm: str,
-) -> dict:
+) -> ImageJobDict:
     """Compress an image file, create a job, and compute metrics."""
     ext = _validate_image_file(file_bytes, filename)
 
@@ -92,6 +96,7 @@ def compress_image(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -114,8 +119,8 @@ def compress_image(
             "processing_time_ms": compress_ms,
             **img_metrics,
         }
-        metrics = _sanitize(raw_metrics)
-        _store_metrics(db, job_id, metrics)
+        metrics = sanitize_metrics(raw_metrics)
+        store_job_metrics(db, job_id, metrics)
 
         return {"job_id": job_id, "status": "done", "metrics": metrics}
 
@@ -135,9 +140,9 @@ def decompress_image(
     file_bytes: bytes,
     filename: str,
     algorithm: str,
-) -> dict:
+) -> ImageJobDict:
     """Decompress a previously compressed image file."""
-    _validate_size_only(file_bytes)
+    validate_size_only(file_bytes)
 
     job = create_job(
         db=db,
@@ -151,6 +156,7 @@ def decompress_image(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -166,8 +172,8 @@ def decompress_image(
         update_job_status(db, job_id, status="done", result_path=result_path)
 
         raw_metrics: dict[str, float] = {"processing_time_ms": decompress_ms}
-        metrics = _sanitize(raw_metrics)
-        _store_metrics(db, job_id, metrics)
+        metrics = sanitize_metrics(raw_metrics)
+        store_job_metrics(db, job_id, metrics)
 
         return {"job_id": job_id, "status": "done", "metrics": metrics}
 
@@ -189,7 +195,7 @@ def embed_message(
     message: str,
     password: str = "",
     algorithm: str | None = None,
-) -> dict:
+) -> ImageJobDict:
     """Embed a secret message into an image, optionally pre-compressing.
 
     If a password is provided, the message is encrypted with AES-GCM before
@@ -210,6 +216,7 @@ def embed_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -232,9 +239,8 @@ def embed_message(
             salt_hex = encrypted[:16].hex()
             message_bytes = encrypted
 
-        img = Image.open(BytesIO(file_bytes)).convert("RGB")
         lsb = LsbCodec()
-        result_img, embed_ms = processing_time(lsb.embed, img, message_bytes)
+        result_img, embed_ms = processing_time(lsb.embed, file_bytes, message_bytes)
 
         buf = BytesIO()
         result_img.save(buf, format="PNG")
@@ -251,10 +257,10 @@ def embed_message(
         total_time = compress_ms + embed_ms
         raw_metrics: dict[str, float] = {
             "processing_time_ms": total_time,
-            "hidden_capacity_bits": float(lsb.capacity(img)),
+            "hidden_capacity_bits": float(lsb.capacity(result_img)),
         }
-        metrics = _sanitize(raw_metrics)
-        _store_metrics(db, job_id, metrics)
+        metrics = sanitize_metrics(raw_metrics)
+        store_job_metrics(db, job_id, metrics)
 
         return {"job_id": job_id, "status": "done", "metrics": metrics}
 
@@ -275,7 +281,7 @@ def extract_message(
     filename: str,
     password: str = "",
     algorithm: str | None = None,
-) -> dict:
+) -> ImageExtractDict:
     """Extract a hidden message from a stego image.
 
     If a password was used during embedding, the extracted payload is decrypted
@@ -296,14 +302,14 @@ def extract_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
         db.commit()
 
-        img = Image.open(BytesIO(file_bytes)).convert("RGB")
         lsb = LsbCodec()
-        extracted_bytes, extract_ms = processing_time(lsb.extract, img)
+        extracted_bytes, extract_ms = processing_time(lsb.extract, file_bytes)
 
         if password:
             from app.core.security.aes_cipher import decrypt_bytes
@@ -327,8 +333,8 @@ def extract_message(
             "processing_time_ms": total_time,
             "extracted_message_size_bytes": float(len(extracted_bytes)),
         }
-        metrics = _sanitize(raw_metrics)
-        _store_metrics(db, job_id, metrics)
+        metrics = sanitize_metrics(raw_metrics)
+        store_job_metrics(db, job_id, metrics)
 
         return {
             "job_id": job_id,
@@ -347,7 +353,7 @@ def extract_message(
         raise
 
 
-def compare_image_job(db: Session, job_id: str) -> dict:
+def compare_image_job(db: Session, job_id: str) -> ImageCompareDict:
     """Return comparison metrics for a completed image job."""
     job = get_job_status(db, job_id)
     if job is None:

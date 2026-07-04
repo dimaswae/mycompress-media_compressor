@@ -82,14 +82,29 @@ class TestDecompressVideo:
 
 class TestEmbedMessage:
     def test_embed_success(self, db_session: Session, sample_mp4_bytes: bytes) -> None:
+        from app.core.steganography.video_lsb import VideoLsbCodec
+        expected_capacity = VideoLsbCodec().capacity(sample_mp4_bytes) - 8
+
         result = embed_message(db_session, sample_mp4_bytes, "test.mp4", "hello")
         assert result["status"] == "done"
         assert "job_id" in result
-        assert "hidden_capacity_bits" in result["metrics"]
+        assert result["metrics"]["hidden_capacity_bits"] == float(expected_capacity)
+        assert "psnr" in result["metrics"]
+        assert "ssim" in result["metrics"]
+        assert "mse" in result["metrics"]
+        assert result["metrics"]["compression_ratio"] == 1.0
 
     def test_embed_with_password(self, db_session: Session, sample_mp4_bytes: bytes) -> None:
+        from app.core.steganography.video_lsb import VideoLsbCodec
+        expected_capacity = VideoLsbCodec().capacity(sample_mp4_bytes) - 8
+
         result = embed_message(db_session, sample_mp4_bytes, "test.mp4", "secret", password="p@ss")
         assert result["status"] == "done"
+        assert result["metrics"]["hidden_capacity_bits"] == float(expected_capacity)
+        assert "psnr" in result["metrics"]
+        assert "ssim" in result["metrics"]
+        assert "mse" in result["metrics"]
+        assert result["metrics"]["compression_ratio"] == 1.0
 
     def test_embed_invalid_extension_raises(
         self, db_session: Session, sample_mp4_bytes: bytes
@@ -145,6 +160,23 @@ class TestExtractMessage:
         with pytest.raises(AppError):
             extract_message(db_session, stego_bytes, "stego.mp4", password="wrong")
 
+    def test_extract_no_password_for_encrypted_raises(
+        self, db_session: Session, sample_mp4_bytes: bytes
+    ) -> None:
+        emb_result = embed_message(
+            db_session, sample_mp4_bytes, "test.mp4", "secret", password="correct"
+        )
+        job_id = emb_result["job_id"]
+
+        from app.infra.storage import load_file
+        from app.services.job_service import get_job_status
+        job = get_job_status(db_session, job_id)
+        stego_bytes = load_file(job.result_path)
+
+        # Extraction should fail with AppError (DecryptionError) when password is empty
+        with pytest.raises(AppError):
+            extract_message(db_session, stego_bytes, "stego.mp4", password="")
+
     def test_extract_invalid_extension_raises(
         self, db_session: Session, sample_mp4_bytes: bytes
     ) -> None:
@@ -183,3 +215,33 @@ class TestCompareVideoJob:
 
             with pytest.raises(AppError):
                 compress_video(db_session, sample_mp4_bytes, "test.mp4")
+
+
+class TestEmbedMessageRealVideoCapacity:
+    def test_embed_real_video_capacity(
+        self, db_session: Session, sample_video_fixture_bytes: bytes
+    ) -> None:
+        is_real = len(sample_video_fixture_bytes) > 20000
+        if is_real:
+            from app.core.steganography.video_lsb import VideoLsbCodec
+            codec = VideoLsbCodec()
+            expected_capacity = codec.capacity(sample_video_fixture_bytes) - 8
+            
+            result = embed_message(
+                db_session, sample_video_fixture_bytes, "test.mp4", "hello"
+            )
+            assert result["status"] == "done"
+            assert result["metrics"]["hidden_capacity_bits"] == float(expected_capacity)
+            
+            from app.infra.storage import load_file
+            from app.services.job_service import get_job_status
+            job = get_job_status(db_session, result["job_id"])
+            stego_bytes = load_file(job.result_path)
+            
+            actual_ratio = len(stego_bytes) / len(sample_video_fixture_bytes)
+            assert result["metrics"]["compression_ratio"] == pytest.approx(actual_ratio)
+            assert "psnr" in result["metrics"]
+            assert "ssim" in result["metrics"]
+            assert "mse" in result["metrics"]
+            assert result["metrics"]["psnr"] > 50.0 or result["metrics"]["psnr"] == 999.0
+

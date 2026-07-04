@@ -5,7 +5,8 @@ import pytest
 from PIL import Image
 
 from app.core.steganography.image_lsb import LsbCodec
-from app.utils.exceptions import CapacityExceededError
+from app.utils.exceptions import CapacityExceededError, InvalidImageError
+
 
 
 def _small_rgb(size: tuple[int, int] = (4, 4)) -> Image.Image:
@@ -83,3 +84,26 @@ class TestLsbCapacityExceeded:
 
         # Verify image was not corrupted
         assert np.array_equal(np.array(img), orig_arr)
+
+
+class TestLsbCorruptImage:
+    def test_embed_corrupt_bytes_raises_invalid_image(self) -> None:
+        codec = LsbCodec()
+        with pytest.raises(InvalidImageError):
+            codec.embed(b"not an image", b"hello")
+
+    def test_extract_corrupt_bytes_raises_invalid_image(self) -> None:
+        codec = LsbCodec()
+        with pytest.raises(InvalidImageError):
+            codec.extract(b"not an image")
+
+    def test_capacity_corrupt_bytes_raises_invalid_image(self) -> None:
+        codec = LsbCodec()
+        with pytest.raises(InvalidImageError):
+            codec.capacity(b"not an image")
+
+    def test_embed_truncated_image_raises_invalid_image(self) -> None:
+        codec = LsbCodec()
+        truncated_png = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR" + b"\x00" * 20
+        with pytest.raises(InvalidImageError):
+            codec.embed(truncated_png, b"hello")

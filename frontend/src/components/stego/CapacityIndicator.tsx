@@ -3,13 +3,15 @@ import React from "react"
 interface CapacityIndicatorProps {
   messageLength: number
   capacityBits: number
+  isEncryptionEnabled?: boolean
 }
 
 export function CapacityIndicator({
   messageLength,
   capacityBits,
+  isEncryptionEnabled = false,
 }: CapacityIndicatorProps) {
-  const capacityBytes = Math.floor(capacityBits / 8) - 4 // -4 for length prefix
+  const capacityBytes = Math.max(0, Math.floor(capacityBits / 8) - 4 - (isEncryptionEnabled ? 44 : 0))
   const isExceeding = messageLength > capacityBytes
 
   return (

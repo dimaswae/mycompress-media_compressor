@@ -30,7 +30,6 @@ register_error_handlers(app)
 
 app.include_router(health_router, prefix=settings.api_prefix)
 app.include_router(audio_router, prefix=settings.api_prefix)
-app.include_router(health_router, prefix=settings.api_prefix)
 app.include_router(image_router, prefix=settings.api_prefix)
 app.include_router(jobs_router, prefix=settings.api_prefix)
 app.include_router(video_router, prefix=settings.api_prefix)

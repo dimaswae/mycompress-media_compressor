@@ -12,7 +12,7 @@ from app.infra.file_validation import (
     validate_magic_bytes,
     validate_size,
 )
-from app.infra.storage import load_file, save_result, save_upload
+from app.infra.storage import load_file, save_result, save_upload, check_quota
 from app.services.job_service import create_job, get_job_status, update_job_status
 from app.utils.exceptions import AppError, NotFoundError
 
@@ -73,6 +73,7 @@ def compress_audio(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -128,6 +129,7 @@ def decompress_audio(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -186,6 +188,7 @@ def embed_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path
@@ -258,6 +261,7 @@ def extract_message(
     job_id = job.id
 
     try:
+        check_quota()
         original_path = save_upload(job_id, filename, file_bytes)
         job = get_job_status(db, job_id)
         job.original_path = original_path

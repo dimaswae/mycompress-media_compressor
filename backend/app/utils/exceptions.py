@@ -50,3 +50,27 @@ class NotFoundError(AppError):
 
     def __init__(self, message: str = "Resource not found") -> None:
         super().__init__(code="NOT_FOUND", message=message)
+
+
+class ValidationError(AppError):
+    """Raised when request data or files fail validation checks."""
+
+    def __init__(self, message: str = "Validation failed") -> None:
+        super().__init__(code="VALIDATION_ERROR", message=message)
+
+
+class InvalidImageError(AppError):
+    """Raised when an image is corrupt or cannot be decoded/opened."""
+
+    def __init__(self, message: str = "Invalid or corrupt image file") -> None:
+        super().__init__(code="INVALID_IMAGE", message=message)
+
+
+class FileTooLargeError(ValidationError):
+    """Raised when an uploaded file exceeds the maximum allowed size."""
+
+    def __init__(self, message: str = "File size exceeds limit") -> None:
+        super().__init__(message=message)
+        self.code = "FILE_TOO_LARGE"
+
+

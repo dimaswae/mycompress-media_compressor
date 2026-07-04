@@ -17,6 +17,13 @@ export function useJobPolling(
   const [active, setActive] = useState(true)
 
   useEffect(() => {
+    setActive(true)
+    setStatus(null)
+    setJob(null)
+    setError(null)
+  }, [jobId])
+
+  useEffect(() => {
     if (!active || !jobId) return
 
     const poll = async () => {

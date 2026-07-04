@@ -12,11 +12,20 @@ from skimage.metrics import (
 )
 
 
+from app.utils.exceptions import ValidationError
+
+
+def _validate_shapes(original: np.ndarray, processed: np.ndarray) -> None:
+    if original.shape != processed.shape:
+        raise ValidationError("Original and processed images must have the same shape")
+
+
 def psnr(original: np.ndarray, processed: np.ndarray) -> float:
     """Compute the Peak Signal-to-Noise Ratio between two images.
 
     Higher values indicate better quality.  Identical images produce ``inf``.
     """
+    _validate_shapes(original, processed)
     return float(_sk_psnr(original, processed))
 
 
@@ -28,6 +37,7 @@ def ssim(original: np.ndarray, processed: np.ndarray) -> float:
     For multi-channel images the ``channel_axis`` parameter is set to ``-1``
     (assumes channels-last layout, i.e. ``(H, W, C)``).
     """
+    _validate_shapes(original, processed)
     if original.ndim == 3:
         return float(_sk_ssim(original, processed, channel_axis=-1))
     return float(_sk_ssim(original, processed))
@@ -38,4 +48,5 @@ def mse(original: np.ndarray, processed: np.ndarray) -> float:
 
     Lower values indicate better quality.  Identical images produce ``0.0``.
     """
+    _validate_shapes(original, processed)
     return float(_sk_mse(original, processed))

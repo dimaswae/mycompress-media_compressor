@@ -6,6 +6,9 @@ import pytest
 from app.core.metrics.image_metrics import mse, psnr, ssim
 
 
+from app.utils.exceptions import ValidationError
+
+
 def _solid_image(value: int, size: tuple[int, int] = (8, 8)) -> np.ndarray:
     """Create an 8-bit RGB image filled with a single colour."""
     return np.full((*size, 3), value, dtype=np.uint8)
@@ -23,6 +26,13 @@ class TestPsnr:
         assert np.isfinite(result)
         assert result > 40.0
 
+    def test_shape_mismatch_raises_validation_error(self) -> None:
+        a = _solid_image(0, size=(8, 8))
+        b = _solid_image(0, size=(8, 9))
+        with pytest.raises(ValidationError) as exc_info:
+            psnr(a, b)
+        assert "Original and processed images must have the same shape" in str(exc_info.value)
+
 
 class TestSsim:
     def test_identical_images_return_one(self) -> None:
@@ -36,6 +46,13 @@ class TestSsim:
         assert result < 1.0
         assert result >= -1.0  # SSIM is bounded in [-1, 1]
 
+    def test_shape_mismatch_raises_validation_error(self) -> None:
+        a = _solid_image(0, size=(8, 8))
+        b = _solid_image(0, size=(8, 9))
+        with pytest.raises(ValidationError) as exc_info:
+            ssim(a, b)
+        assert "Original and processed images must have the same shape" in str(exc_info.value)
+
 
 class TestMse:
     def test_identical_images_return_zero(self) -> None:
@@ -47,3 +64,10 @@ class TestMse:
         b = _solid_image(255)
         result = mse(a, b)
         assert result > 0
+
+    def test_shape_mismatch_raises_validation_error(self) -> None:
+        a = _solid_image(0, size=(8, 8))
+        b = _solid_image(0, size=(8, 9))
+        with pytest.raises(ValidationError) as exc_info:
+            mse(a, b)
+        assert "Original and processed images must have the same shape" in str(exc_info.value)

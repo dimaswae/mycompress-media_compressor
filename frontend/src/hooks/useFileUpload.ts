@@ -6,16 +6,19 @@ export function useFileUpload() {
   const [result, setResult] = useState<any>(null)
   const [isUploading, setIsUploading] = useState(false)
 
-  const upload = useCallback(async (uploadFn: () => Promise<any>) => {
+  const upload = useCallback(async (uploadFn: (onProgress: (p: number) => void) => Promise<any>) => {
     setIsUploading(true)
     setError(null)
     setProgress(0)
     setResult(null)
 
     try {
-      const res = await uploadFn()
+      const res = await uploadFn((p: number) => {
+        setProgress(p)
+      })
       setProgress(100)
       setResult(res)
+      return res
     } catch (e) {
       setError((e as Error).message)
     } finally {

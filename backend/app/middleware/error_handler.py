@@ -16,6 +16,8 @@ from app.utils.exceptions import (
     NotFoundError,
     StorageQuotaError,
     UnsupportedFormatError,
+    ValidationError,
+    InvalidImageError,
 )
 
 _STATUS_MAP: dict[type[AppError], int] = {
@@ -25,6 +27,8 @@ _STATUS_MAP: dict[type[AppError], int] = {
     NotFoundError: 404,
     FFmpegTimeoutError: 504,
     StorageQuotaError: 507,
+    ValidationError: 400,
+    InvalidImageError: 400,
 }
 
 
@@ -70,6 +74,18 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: StorageQuotaError
     ) -> JSONResponse:
         return _build_response(507, exc)
+
+    @app.exception_handler(ValidationError)
+    async def _handle_validation_error(
+        request: Request, exc: ValidationError
+    ) -> JSONResponse:
+        return _build_response(400, exc)
+
+    @app.exception_handler(InvalidImageError)
+    async def _handle_invalid_image_error(
+        request: Request, exc: InvalidImageError
+    ) -> JSONResponse:
+        return _build_response(400, exc)
 
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:

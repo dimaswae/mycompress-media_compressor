@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 
 from app.config import settings
-from app.utils.exceptions import UnsupportedFormatError
+from app.utils.exceptions import UnsupportedFormatError, FileTooLargeError
 
 EXTENSION_WHITELIST: set[str] = {".png", ".jpg", ".jpeg", ".wav", ".mp3", ".mp4"}
 
@@ -82,12 +82,11 @@ def validate_magic_bytes(data: bytes, extension: str) -> None:
 def validate_size(data: bytes) -> None:
     """Check that the data size does not exceed the configured upload limit.
 
-    Raises ``UnsupportedFormatError`` (semantically a validation error) when
-    the payload exceeds ``settings.upload_max_size_mb``.
+    Raises ``FileTooLargeError`` when the payload exceeds ``settings.upload_max_size_mb``.
     """
     max_bytes = settings.upload_max_size_mb * 1024 * 1024
     if len(data) > max_bytes:
-        raise UnsupportedFormatError(
+        raise FileTooLargeError(
             f"File size {len(data)} bytes exceeds maximum of {max_bytes} bytes "
             f"({settings.upload_max_size_mb} MB)"
         )
