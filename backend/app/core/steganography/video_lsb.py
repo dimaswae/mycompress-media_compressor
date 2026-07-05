@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 
 import logging
-from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError, VideoProcessingError
+from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError, VideoProcessingError, VideoSystemError
 
 
 class _VideoLsbExtractError(AppError):
@@ -204,7 +204,9 @@ class VideoLsbCodec:
         except Exception as exc:
             logger = logging.getLogger(__name__)
             logger.error("Failed to calculate video capacity: %s", exc, exc_info=True)
-            raise VideoProcessingError(f"Failed to calculate video capacity: {exc}") from exc
+            if isinstance(exc, (subprocess.CalledProcessError, FileNotFoundError, PermissionError)):
+                raise VideoSystemError(f"Server-side video processing system error: {exc}") from exc
+            raise VideoProcessingError(f"Failed to calculate video capacity. File may be corrupt: {exc}") from exc
 
     def embed(self, video_bytes: bytes, message: bytes) -> bytes:
         """Embed *message* into *video_bytes* and return a new MP4 byte string."""
@@ -247,7 +249,9 @@ class VideoLsbCodec:
         except Exception as exc:
             logger = logging.getLogger(__name__)
             logger.error("Failed to embed message into video: %s", exc, exc_info=True)
-            raise VideoProcessingError(f"Failed to embed message into video: {exc}") from exc
+            if isinstance(exc, (subprocess.CalledProcessError, FileNotFoundError, PermissionError)):
+                raise VideoSystemError(f"Server-side video processing system error: {exc}") from exc
+            raise VideoProcessingError(f"Failed to embed message into video. File may be corrupt: {exc}") from exc
 
     def extract(self, video_bytes: bytes) -> bytes:
         """Extract a hidden message from *video_bytes*."""
@@ -270,4 +274,6 @@ class VideoLsbCodec:
         except Exception as exc:
             logger = logging.getLogger(__name__)
             logger.error("Failed to extract message from video: %s", exc, exc_info=True)
-            raise VideoProcessingError(f"Failed to extract message from video: {exc}") from exc
+            if isinstance(exc, (subprocess.CalledProcessError, FileNotFoundError, PermissionError)):
+                raise VideoSystemError(f"Server-side video processing system error: {exc}") from exc
+            raise VideoProcessingError(f"Failed to extract message from video. File may be corrupt: {exc}") from exc

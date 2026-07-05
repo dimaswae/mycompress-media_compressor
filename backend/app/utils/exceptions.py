@@ -81,4 +81,12 @@ class VideoProcessingError(AppError):
         super().__init__(code="VIDEO_PROCESSING_ERROR", message=message)
 
 
+class VideoSystemError(AppError):
+    """Raised when server-side video tools (FFmpeg/OpenCV) fail due to system issues."""
+
+    def __init__(self, message: str = "Internal video processing system error") -> None:
+        super().__init__(code="VIDEO_SYSTEM_ERROR", message=message)
+
+
+
 

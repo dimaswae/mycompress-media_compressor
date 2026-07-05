@@ -19,6 +19,7 @@ from app.utils.exceptions import (
     ValidationError,
     InvalidImageError,
     VideoProcessingError,
+    VideoSystemError,
 )
 
 _STATUS_MAP: dict[type[AppError], int] = {
@@ -31,6 +32,7 @@ _STATUS_MAP: dict[type[AppError], int] = {
     ValidationError: 400,
     InvalidImageError: 400,
     VideoProcessingError: 400,
+    VideoSystemError: 500,
 }
 
 
@@ -94,6 +96,12 @@ def register_error_handlers(app: FastAPI) -> None:
         request: Request, exc: VideoProcessingError
     ) -> JSONResponse:
         return _build_response(400, exc)
+
+    @app.exception_handler(VideoSystemError)
+    async def _handle_video_system_error(
+        request: Request, exc: VideoSystemError
+    ) -> JSONResponse:
+        return _build_response(500, exc)
 
     @app.exception_handler(AppError)
     async def _handle_app_error(request: Request, exc: AppError) -> JSONResponse:
