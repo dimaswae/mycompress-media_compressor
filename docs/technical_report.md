@@ -14,10 +14,10 @@ Proyek `mycompress` dirancang untuk memecahkan dilema ini dengan mengimplementas
 
 ---
 
-## 2. Methodology (Metodologi)
+### 2. Methodology (Metodologi)
 
 ### 2.1 Arsitektur Sistem
-Sistem dibangun menggunakan prinsip *Clean Architecture* dengan memisahkan lapisan API, Service koordinasi bisnis, Core pemrosesan, dan Infrastructure platform.
+Sistem dibangun menggunakan prinsip *Clean Architecture* dengan memisahkan lapisan API, Service koordinasi bisnis, Core pemrosesan, dan Infrastructure platform. Di sisi frontend, struktur routing dirancang menggunakan `react-router-dom` dengan `AppLayout` terpusat guna menyatukan `Navbar` di dalam konteks router, sementara `ToastProvider` bertindak sebagai wrapper shell terluar di `App.tsx` untuk memastikan notifikasi toast dapat diakses dari seluruh rute.
 
 Alur data utama digambarkan dalam diagram berikut:
 
@@ -33,22 +33,32 @@ graph TD
 ```
 
 Ketika permintaan pemrosesan dikirimkan:
-1. **Frontend** mengunggah file media melalui form data multipart.
+1. **Frontend** mengunggah file media melalui form data multipart berdasarkan mode yang aktif (Compress vs Stego).
 2. **FastAPI Router** menerima data, memvalidasi ukuran file, memverifikasi ekstensi, dan melakukan *magic-byte sniffing* di layer infra.
-3. **Services Layer** menginisialisasi objek `Job` di SQLite, menyimpan file asli ke disk, dan memanggil modul `Core` yang sesuai.
+3. **Services Layer** menginisialisasi objek `Job` di SQLite, menyimpan file asli ke disk, dan memanggil modul `Core` yang sesuai secara independen.
 4. **Compression Module** dan **Steganography Module** memproses file media secara spasial/frekuensi.
 5. **Metrics Module** mengukur kualitas hasil pemrosesan (PSNR, SSIM, MSE, rasio ukuran file, dan waktu eksekusi).
 6. Hasil pemrosesan dan metrik disimpan ke database, dan status job diubah menjadi `done` agar dapat diunduh oleh pengguna.
 
 ---
 
-### 2.2 Algoritma per Tipe Media
+### 2.2 Pemisahan Operasi (Decoupling) Compress vs Steganography
+Keputusan desain yang krusial pada versi terbaru adalah **decoupling total** antara operasi kompresi dan steganografi. Berdasarkan investigasi teknis pada ketiga media:
+* **Audio**: Kompresi mengubah WAV ke MP3 (lossy) melalui pemangkasan frekuensi tinggi dan bitrate. Namun steganografi LSB audio (`AudioLsbCodec`) membutuhkan PCM WAV asli. Memaksakan chaining (misal mengupload hasil kompresi MP3 ke stego) akan memicu `UnsupportedFormatError` di backend karena hilangnya signature RIFF/WAVE.
+* **Image**: Kompresi gambar menghasilkan file `.cmp` (RLE/Huffman terkompresi) yang ditolak secara langsung oleh validasi ekstensi (`validate_extension`) di endpoint stego karena format tersebut bukan cover image standar yang valid.
+* **Video**: Walaupun kompresi MP4 lossy (H.264 CRF 28) bisa diterima oleh stego video (`VideoLsbCodec`), stego LSB spasial pada I-frames akan langsung rusak jika video stego tersebut ditimpa kompresi lossy lagi karena pergeseran bitwise dari kuantisasi.
+
+Untuk mencegah error format dan kerusakan data (*data corruption*) ini, frontend kini mengimplementasikan **Mode Selector** berupa tab independen ("Compress / Decompress" vs "Hide / Extract Message") di bagian atas setiap halaman media. Pengguna dipaksa beroperasi langsung pada file asli dan tidak ada jalur chaining terselubung di UI.
+
+---
+
+### 2.3 Algoritma per Tipe Media
 
 #### A. Citra (Image)
 * **Kompresi**:
   * **RLE (Run-Length Encoding)**: Melakukan kompresi lossless dengan memindai buffer pixel mentah dan mengodekan urutan pixel yang berulang menjadi pasangan `(count, value)`.
   * **Huffman Coding**: Membangun pohon biner berdasarkan frekuensi kemunculan pixel citra, menghasilkan kode biner variabel untuk menghemat ukuran bitstream.
-* **Steganografi**: Menggunakan metode LSB spasial dengan menyisipkan bit-bit pesan ke dalam bit terendah (least significant bit) dari kanal warna Merah, Hijau, dan Biru (RGB) pada setiap pixel citra.
+* **Steganografi**: Menggunakan metode LSB spasial dengan menyisipkan bit-bit pesan ke dalam bit terendah (least significant bit) dari kanal warna Merah, Hijau, dan Biru (RGB) pada setiap pixel citra. Di tingkat stego, opsi `algorithm` juga tersedia tetapi khusus mengompresi **teks pesan** (bukan cover citra) untuk menghemat ruang tampung.
 
 #### B. Audio
 * **Kompresi**: Menggunakan transkoder FFmpeg untuk mendownscale file WAV mentah ke format MP3 dengan menurunkan bit rate (target default: `128k`).
@@ -56,7 +66,7 @@ Ketika permintaan pemrosesan dikirimkan:
 
 #### C. Video
 * **Kompresi**: Menggunakan kompresi *lossy* berbasis *Constant Rate Factor* (CRF) default `28` menggunakan encoder H.264 (`libx264`) melalui FFmpeg.
-* **Steganografi (Redesign)**:
+* **Steganografi**:
   * *Pendekatan Awal (Gagal)*: Percobaan penyisipan langsung pada byte bitstream (box `mdat` di MP4) merusak struktur container video dan menyebabkan file tidak dapat didekode (corrupt).
   * *Redesign Pendekatan Spasial I-Frame*: Modul mengekstrak *Intra-coded frames* (I-frames) dari video MP4 secara lossless. Steganografi LSB diterapkan pada kanal spasial (RGB) pixel I-frame. Frame yang telah disisipi kemudian digabungkan kembali (*remux*) ke dalam container video menggunakan kompresi **lossless** (`libx264rgb` dengan CRF `0`) agar bit-bit LSB spasial di I-frame tetap terjaga secara sempurna tanpa degradasi kompresi.
 
@@ -95,7 +105,7 @@ Selama proses pengembangan, diidentifikasi keterbatasan mendasar terkait format 
   1. Operasi **Compress** menggunakan kompresi lossy H.264 (CRF 28) untuk mengejar rasio kompresi maksimum.
   2. Operasi **Embed** menggunakan I-frame LSB spasial yang diremux secara **lossless** menggunakan kodek `libx264rgb` dan `-crf 0`. 
   Trade-off dari pilihan ini adalah terjadinya pembengkakan ukuran file stego video (~21.5x lebih besar), namun ini merupakan harga matematis yang harus dibayar demi menjaga keutuhan data (*payload integrity*) di dalam video spasial.
-* **Rekomendasi Pengembangan Lanjutan (Future Work)**: Saat ini UI belum membatasi atau memperingatkan user secara visual ketika mencoba mengalirkan kedua fitur ini secara berurutan. Rekomendasi pengembangan selanjutnya adalah menambahkan dialog peringatan/warning eksklusif pada UI frontend yang secara eksplisit mengedukasi pengguna bahwa melakukan kompresi pada video yang telah disisipi pesan stego akan merusak pesan di dalamnya.
+* **Status Penyelesaian (Resolved)**: Keterbatasan UI yang sebelumnya membolehkan chaining asinkron telah diselesaikan dengan menghadirkan **Mode Selector**. Mode ini bertindak sebagai pembatas keras di mana opsi Compress dan Stego dipisah pada tab tersendiri, menghindarkan pengguna dari degradasi payload data stego akibat kompresi lossy.
 
 ### 4.3 30s NFR Caveat
 * **Batasan**: Non-Functional Requirement (NFR) menetapkan batas waktu proses 30 detik untuk pengolahan media.
