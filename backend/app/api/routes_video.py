@@ -75,4 +75,6 @@ async def compare_video_endpoint(
 ) -> VideoCompareResponse:
     """Compare original and processed video for a completed job."""
     result = compare_video_job(db, job_id)
+    result["original_url"] = f"/api/v1/jobs/{job_id}/download/original"
+    result["result_url"] = f"/api/v1/jobs/{job_id}/download"
     return VideoCompareResponse(**result)

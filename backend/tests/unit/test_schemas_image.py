@@ -50,11 +50,17 @@ class TestImageExtractResponse:
 class TestImageCompareResponse:
     def test_minimal(self) -> None:
         obj = ImageCompareResponse(
-            job_id="abc", original_size=100, result_size=80
+            job_id="abc",
+            original_size=100,
+            result_size=80,
+            original_url="/api/v1/jobs/abc/download/original",
+            result_url="/api/v1/jobs/abc/download",
         )
         assert obj.job_id == "abc"
         assert obj.original_size == 100
         assert obj.result_size == 80
+        assert obj.original_url == "/api/v1/jobs/abc/download/original"
+        assert obj.result_url == "/api/v1/jobs/abc/download"
         assert obj.metrics == {}
 
     def test_with_metrics(self) -> None:
@@ -63,5 +69,8 @@ class TestImageCompareResponse:
             original_size=200,
             result_size=100,
             metrics={"psnr": 35.0, "mse": 0.5},
+            original_url="/api/v1/jobs/abc/download/original",
+            result_url="/api/v1/jobs/abc/download",
         )
         assert obj.metrics["psnr"] == 35.0
+        assert obj.original_url == "/api/v1/jobs/abc/download/original"

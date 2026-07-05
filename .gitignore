@@ -11,6 +11,7 @@ dist/
 
 # Runtime
 storage/
+openapi.json
 
 # IDE
 .vscode/

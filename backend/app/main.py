@@ -54,7 +54,11 @@ async def _run_sweep_loop() -> None:
 
 @app.on_event("startup")
 async def startup() -> None:
-    """Create storage directory and register the background sweep loop."""
+    """Create storage directory, initialize database tables, and register the background sweep loop."""
+    from app.db.database import Base, engine
+    from app.db.models import Job, Metric  # noqa: F401
+
+    Base.metadata.create_all(bind=engine)
     Path(settings.storage_dir).mkdir(parents=True, exist_ok=True)
     asyncio.create_task(_run_sweep_loop())
     logger.info(

@@ -40,6 +40,21 @@ async def download_job_result(
     return FileResponse(job.result_path)
 
 
+@router.get("/jobs/{job_id}/download/original")
+async def download_job_original(
+    job_id: str, db: Session = Depends(get_db)
+) -> FileResponse:
+    """Stream the original input file for a job."""
+    job = get_job_status(db, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+    if job.original_path is None or job.original_path == "":
+        raise HTTPException(
+            status_code=404, detail="No original file available for this job"
+        )
+    return FileResponse(job.original_path)
+
+
 @router.delete("/jobs/{job_id}", status_code=204)
 async def delete_job(job_id: str, db: Session = Depends(get_db)) -> None:
     """Delete a job's files and mark it as deleted."""

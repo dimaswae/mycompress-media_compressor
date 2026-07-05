@@ -80,4 +80,6 @@ async def compare_image_endpoint(
 ) -> ImageCompareResponse:
     """Compare original and processed image for a completed job."""
     result = compare_image_job(db, job_id)
+    result["original_url"] = f"/api/v1/jobs/{job_id}/download/original"
+    result["result_url"] = f"/api/v1/jobs/{job_id}/download"
     return ImageCompareResponse(**result)

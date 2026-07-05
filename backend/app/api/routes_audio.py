@@ -76,4 +76,6 @@ async def compare_audio_endpoint(
 ) -> AudioCompareResponse:
     """Compare original and processed audio for a completed job."""
     result = compare_audio_job(db, job_id)
+    result["original_url"] = f"/api/v1/jobs/{job_id}/download/original"
+    result["result_url"] = f"/api/v1/jobs/{job_id}/download"
     return AudioCompareResponse(**result)
