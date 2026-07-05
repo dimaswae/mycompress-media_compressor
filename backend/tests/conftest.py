@@ -32,6 +32,26 @@ def _ensure_prod_db_tables() -> Generator[None, None, None]:
     Base.metadata.drop_all(bind=prod_engine)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Generator[None, None, None]:
+    """Redirect settings.storage_dir to an isolated tmp_path for every test.
+
+    This prevents unit tests (which call service functions directly) from
+    writing into the real backend/storage/ directory and accumulating files
+    across test runs. Each test gets a fresh, empty directory that pytest
+    removes automatically when the test ends.
+    """
+    import app.infra.storage as _storage_module
+    from app.config import settings
+
+    isolated = tmp_path / "storage"
+    isolated.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setattr(settings, "storage_dir", str(isolated))
+    # Also patch the module-level helper that reads settings lazily
+    monkeypatch.setattr(_storage_module, "_storage_root", lambda: isolated)
+    yield
+
+
 @pytest.fixture
 def db_session(tmp_path: Path) -> Generator[Session, None, None]:
     """Create a fresh in-memory SQLite database for each test."""
