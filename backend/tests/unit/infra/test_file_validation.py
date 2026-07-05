@@ -8,7 +8,7 @@ from app.infra.file_validation import (
     validate_magic_bytes,
     validate_size,
 )
-from app.utils.exceptions import UnsupportedFormatError
+from app.utils.exceptions import UnsupportedFormatError, FileTooLargeError
 
 
 class TestValidateExtension:
@@ -104,7 +104,7 @@ class TestValidateSize:
 
         monkeypatch.setattr(fv.settings, "upload_max_size_mb", 1)
         data = b"x" * (2 * 1024 * 1024)  # 2 MB
-        with pytest.raises(UnsupportedFormatError) as exc:
+        with pytest.raises(FileTooLargeError) as exc:
             validate_size(data)
         assert "exceeds maximum" in exc.value.message
 
