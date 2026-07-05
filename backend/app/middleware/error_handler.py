@@ -18,6 +18,7 @@ from app.utils.exceptions import (
     UnsupportedFormatError,
     ValidationError,
     InvalidImageError,
+    VideoProcessingError,
 )
 
 _STATUS_MAP: dict[type[AppError], int] = {
@@ -29,6 +30,7 @@ _STATUS_MAP: dict[type[AppError], int] = {
     StorageQuotaError: 507,
     ValidationError: 400,
     InvalidImageError: 400,
+    VideoProcessingError: 400,
 }
 
 
@@ -84,6 +86,12 @@ def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(InvalidImageError)
     async def _handle_invalid_image_error(
         request: Request, exc: InvalidImageError
+    ) -> JSONResponse:
+        return _build_response(400, exc)
+
+    @app.exception_handler(VideoProcessingError)
+    async def _handle_video_processing_error(
+        request: Request, exc: VideoProcessingError
     ) -> JSONResponse:
         return _build_response(400, exc)
 

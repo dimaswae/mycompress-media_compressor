@@ -156,3 +156,22 @@ class TestVideoLsbCodecRealVideo:
                 print(f"\n[TEST PSNR REPORT] Baseline PSNR for I-frames: {psnrs}")
                 for psnr in psnrs:
                     assert psnr > 50.0 or psnr == float("inf")
+
+
+class TestVideoLsbCodecFailure:
+    def test_embed_corrupt_mp4_raises_video_processing_error(self) -> None:
+        codec = VideoLsbCodec()
+        # Passes _is_mp4 but fails ffprobe/cv2, triggering fallback-turned-error
+        corrupt_mp4 = b"\x00\x00\x00\x18ftyp" + b"x" * 1000
+        from app.utils.exceptions import VideoProcessingError
+        with pytest.raises(VideoProcessingError) as exc_info:
+            codec.embed(corrupt_mp4, b"test")
+        assert "Failed to embed" in str(exc_info.value.message)
+
+    def test_extract_corrupt_mp4_raises_video_processing_error(self) -> None:
+        codec = VideoLsbCodec()
+        corrupt_mp4 = b"\x00\x00\x00\x18ftyp" + b"x" * 1000
+        from app.utils.exceptions import VideoProcessingError
+        with pytest.raises(VideoProcessingError) as exc_info:
+            codec.extract(corrupt_mp4)
+        assert "Failed to extract" in str(exc_info.value.message)

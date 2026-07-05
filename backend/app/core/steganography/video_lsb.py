@@ -4,7 +4,8 @@ import tempfile
 import cv2
 import numpy as np
 
-from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError
+import logging
+from app.utils.exceptions import AppError, CapacityExceededError, UnsupportedFormatError, VideoProcessingError
 
 
 class _VideoLsbExtractError(AppError):
@@ -25,32 +26,6 @@ def _is_mp4(data: bytes) -> bool:
     return False
 
 
-def _find_mdat_payload(data: bytes) -> tuple[int, int]:
-    """Locate the ``mdat`` box payload inside an MP4 container.
-
-    Iterates over top-level boxes (size + type) until the ``mdat`` box is
-    found.  Returns ``(payload_offset, payload_size)`` — the offset and
-    byte count of the data *after* the 8-byte box header.
-
-    Raises ``UnsupportedFormatError`` if the box is not found.
-    """
-    import struct
-    pos = 0
-    while pos + 8 <= len(data):
-        (box_size,) = struct.unpack_from(">I", data, pos)
-        box_type = data[pos + 4 : pos + 8]
-        if box_type == b"mdat":
-            payload_offset = pos + 8
-            if box_size == 0:
-                box_size = len(data) - pos
-            actual_payload = box_size - 8
-            if payload_offset + actual_payload > len(data):
-                actual_payload = len(data) - payload_offset
-            return payload_offset, actual_payload
-        if box_size == 0:
-            break
-        pos += box_size
-    raise UnsupportedFormatError("MP4 file contains no mdat box")
 
 
 def _get_iframe_indices(video_path: str) -> list[int]:
@@ -226,9 +201,10 @@ class VideoLsbCodec:
                     raise AppError(code="INVALID_VIDEO_DIMENSIONS", message="Could not read video dimensions")
                 
                 return len(iframe_indices) * w * h * 3
-        except Exception:
-            _offset, size = _find_mdat_payload(video_bytes)
-            return size
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.error("Failed to calculate video capacity: %s", exc, exc_info=True)
+            raise VideoProcessingError(f"Failed to calculate video capacity: {exc}") from exc
 
     def embed(self, video_bytes: bytes, message: bytes) -> bytes:
         """Embed *message* into *video_bytes* and return a new MP4 byte string."""
@@ -268,30 +244,10 @@ class VideoLsbCodec:
                     return f.read()
         except CapacityExceededError:
             raise
-        except Exception:
-            # Fallback to old mdat byte embedding
-            offset, data_size = _find_mdat_payload(video_bytes)
-            total_bits = data_size
-
-            length_bytes = len(message).to_bytes(4, "big")
-            payload = length_bytes + message
-
-            if len(payload) * 8 > total_bits:
-                max_msg = (total_bits // 8) - 4
-                raise CapacityExceededError(
-                    f"Message size {len(message)} bytes exceeds maximum of "
-                    f"{max_msg} bytes (mdat capacity = {total_bits} bits)"
-                )
-
-            header = video_bytes[:offset]
-            mdat_payload = bytearray(video_bytes[offset : offset + data_size])
-
-            for i, byte_val in enumerate(payload):
-                for bit_idx in range(8):
-                    bit = (byte_val >> (7 - bit_idx)) & 1
-                    mdat_payload[i * 8 + bit_idx] = (mdat_payload[i * 8 + bit_idx] & 0xFE) | bit
-
-            return bytes(header) + bytes(mdat_payload)
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.error("Failed to embed message into video: %s", exc, exc_info=True)
+            raise VideoProcessingError(f"Failed to embed message into video: {exc}") from exc
 
     def extract(self, video_bytes: bytes) -> bytes:
         """Extract a hidden message from *video_bytes*."""
@@ -311,44 +267,7 @@ class VideoLsbCodec:
                 return _extract_bits(frames, iframe_indices)
         except _VideoLsbExtractError:
             raise
-        except Exception:
-            # Fallback to old mdat byte extraction
-            offset, data_size = _find_mdat_payload(video_bytes)
-            total_bits = data_size
-
-            mdat_payload = video_bytes[offset : offset + data_size]
-
-            all_bits = [int(b & 1) for b in mdat_payload]
-
-            usable_bits = (total_bits // 8) * 8
-            raw_bytes_list: list[int] = []
-            for i in range(0, usable_bits, 8):
-                chunk = all_bits[i : i + 8]
-                if len(chunk) < 8:
-                    break
-                byte_val = 0
-                for b in chunk:
-                    byte_val = (byte_val << 1) | b
-                raw_bytes_list.append(byte_val)
-            raw_bytes = bytes(raw_bytes_list)
-
-            if len(raw_bytes) < 4:
-                raise _VideoLsbExtractError("Truncated payload: missing length prefix")
-
-            msg_len = int.from_bytes(raw_bytes[:4], "big")
-
-            if msg_len == 0:
-                return b""
-
-            if msg_len > data_size:
-                raise _VideoLsbExtractError(
-                    f"Declared message length {msg_len} exceeds mdat data size — "
-                    f"possibly corrupt or wrong password"
-                )
-
-            if 4 + msg_len > len(raw_bytes):
-                raise _VideoLsbExtractError(
-                    "Truncated payload: message body shorter than declared length"
-                )
-
-            return raw_bytes[4 : 4 + msg_len]
+        except Exception as exc:
+            logger = logging.getLogger(__name__)
+            logger.error("Failed to extract message from video: %s", exc, exc_info=True)
+            raise VideoProcessingError(f"Failed to extract message from video: {exc}") from exc

@@ -74,3 +74,11 @@ class FileTooLargeError(ValidationError):
         self.code = "FILE_TOO_LARGE"
 
 
+class VideoProcessingError(AppError):
+    """Raised when video compression or steganography processing fails."""
+
+    def __init__(self, message: str = "Video processing failed") -> None:
+        super().__init__(code="VIDEO_PROCESSING_ERROR", message=message)
+
+
+
