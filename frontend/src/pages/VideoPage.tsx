@@ -3,7 +3,7 @@ import { UploadDropzone } from "../components/upload/UploadDropzoneNew"
 import { Button } from "../components/common/Button"
 import { MessageInput } from "../components/stego/MessageInput"
 import { EncryptionToggle } from "../components/stego/EncryptionToggle"
-import { MediaPageLayout, Section, JobStatusPanel } from "../components/common/MediaPageLayout"
+import { MediaPageLayout, Section, JobStatusPanel, ResultPanel } from "../components/common/MediaPageLayout"
 import { useFileUpload } from "../hooks/useFileUpload"
 import { useJobPolling } from "../hooks/useJobPolling"
 import * as videoApi from "../api/videoApi"
@@ -108,10 +108,14 @@ export function VideoPage() {
       {(isUploading || progress > 0) && <UploadProgress percent={progress} />}
 
       {/* Job result */}
-      {status && (
-        <Section title="Result">
-          <JobStatusPanel status={status} jobId={job?.job_id} />
-        </Section>
+      {status && status !== "done" && (
+        <JobStatusPanel status={status} jobId={job?.job_id} />
+      )}
+      {status === "done" && job?.job_id && (
+        <ResultPanel
+          jobId={job.job_id}
+          accentColor="#a78bfa"
+        />
       )}
     </MediaPageLayout>
   )

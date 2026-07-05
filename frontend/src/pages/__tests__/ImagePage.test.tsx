@@ -117,8 +117,7 @@ describe("ImagePage", () => {
     globalThis.Image = originalImage
   })
 
-  it("renders comparison view and metrics table when job status is done", async () => {
-    // Setup file upload and job polling mocks
+  it("shows ResultPanel with download link and size summary when job is done", async () => {
     const mockUpload = vi.fn(async (cb) => {
       await cb()
       return { job_id: "test-job-id" }
@@ -131,9 +130,6 @@ describe("ImagePage", () => {
       result: null,
     } as any)
 
-    // Mock useJobPolling behavior:
-    // When called with "", returns null status.
-    // When called with "test-job-id", returns "done" status.
     vi.mocked(useJobPolling).mockImplementation((jobId: string) => {
       if (jobId === "test-job-id") {
         return {
@@ -150,59 +146,50 @@ describe("ImagePage", () => {
           stopPolling: vi.fn(),
         }
       }
-      return {
-        status: null,
-        job: null,
-        error: null,
-        stopPolling: vi.fn(),
-      }
+      return { status: null, job: null, error: null, stopPolling: vi.fn() }
     })
 
     const mockCompareResponse = {
       job_id: "test-job-id",
       original_size: 2000,
       result_size: 1500,
-      metrics: {
-        psnr: 50.1,
-        ssim: 0.995,
-        mse: 0.5,
-      },
+      metrics: { psnr: 50.1, ssim: 0.995, mse: 0.5 },
       original_url: "/api/v1/jobs/test-job-id/download/original",
       result_url: "/api/v1/jobs/test-job-id/download",
     }
-    const mockCompareImage = vi.mocked(imageApi.compareImage)
-    mockCompareImage.mockResolvedValue(mockCompareResponse)
-    
-    const mockEmbedMessage = vi.mocked(imageApi.embedMessage)
-    mockEmbedMessage.mockResolvedValue({
+    vi.mocked(imageApi.compareImage).mockResolvedValue(mockCompareResponse)
+    vi.mocked(imageApi.embedMessage).mockResolvedValue({
       job_id: "test-job-id",
       status: "processing",
       metrics: {},
     })
 
-    // Mock URL.createObjectURL and URL.revokeObjectURL
     globalThis.URL.createObjectURL = vi.fn(() => "blob:http://localhost/test-uuid")
     globalThis.URL.revokeObjectURL = vi.fn()
 
     render(<ImagePage />)
 
-    // 1. Select the file
+    // Select file and submit
     fireEvent.click(screen.getByTestId("mock-upload"))
-
-    // 2. Click "Embed Message" to upload and trigger setJobId
     fireEvent.click(screen.getByText("Embed Message"))
 
-    // 3. Wait for comparison to load
+    // Wait for compareImage to be called (compare data loaded)
     await waitFor(() => {
-      expect(mockCompareImage).toHaveBeenCalledWith("test-job-id")
+      expect(imageApi.compareImage).toHaveBeenCalledWith("test-job-id")
     })
 
-    // 4. Verify rendering of comparison and metrics
-    expect(screen.getByText("Comparison")).toBeInTheDocument()
-    expect(screen.getByText("Metrics")).toBeInTheDocument()
-    expect(screen.getByText("psnr")).toBeInTheDocument()
-    expect(screen.getByText("50.1000")).toBeInTheDocument()
-    expect(screen.getByText("ssim")).toBeInTheDocument()
-    expect(screen.getByText("0.9950")).toBeInTheDocument()
+    // ── ResultPanel assertions ──
+    // 1. Download link must be present and point to the correct endpoint
+    const downloadLink = screen.getByRole("link", { name: /download result/i })
+    expect(downloadLink).toBeInTheDocument()
+    expect(downloadLink).toHaveAttribute("href", expect.stringContaining("/jobs/test-job-id/download"))
+
+    // 2. Size summary: original → result sizes should be visible
+    // 2.0 KB → 1.5 KB
+    expect(screen.getByText("1.95 KB")).toBeInTheDocument() // 2000 B
+    expect(screen.getByText("1.46 KB")).toBeInTheDocument() // 1500 B
+
+    // 3. Collapsible technical details trigger should be rendered
+    expect(screen.getByText(/technical details/i)).toBeInTheDocument()
   })
 })

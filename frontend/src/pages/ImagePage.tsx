@@ -4,7 +4,7 @@ import { Button } from "../components/common/Button"
 import { MessageInput } from "../components/stego/MessageInput"
 import { EncryptionToggle } from "../components/stego/EncryptionToggle"
 import { CapacityIndicator } from "../components/stego/CapacityIndicator"
-import { MediaPageLayout, Section, JobStatusPanel } from "../components/common/MediaPageLayout"
+import { MediaPageLayout, Section, JobStatusPanel, ResultPanel } from "../components/common/MediaPageLayout"
 import { useFileUpload } from "../hooks/useFileUpload"
 import { useJobPolling } from "../hooks/useJobPolling"
 import * as imageApi from "../api/imageApi"
@@ -161,24 +161,32 @@ export function ImagePage() {
       {/* Upload progress */}
       {(isUploading || progress > 0) && <UploadProgress percent={progress} />}
 
-      {/* Job status + results */}
-      {status && (
-        <Section title="Result">
-          <JobStatusPanel status={status} jobId={job?.job_id} />
+      {/* Job status */}
+      {status && !job?.job_id && (
+        <JobStatusPanel status={status} />
+      )}
 
-          {status === "done" && compareData && (
-            <>
-              <hr className="divider" style={{ margin: "0.5rem 0" }} />
-              <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>Comparison</h3>
-              <ImageCompareView
-                originalUrl={getAbsoluteUrl(compareData.original_url)}
-                resultUrl={getAbsoluteUrl(compareData.result_url)}
-              />
-              <h3 style={{ fontSize: "0.9375rem", fontWeight: 700, color: "var(--color-muted)", textTransform: "uppercase", letterSpacing: "0.05em", margin: "0.5rem 0 0" }}>Metrics</h3>
-              <MetricsTable metrics={compareData.metrics} />
-            </>
+      {/* Result panel — shown once job_id is known */}
+      {status === "done" && job?.job_id && (
+        <ResultPanel
+          jobId={job.job_id}
+          originalSize={compareData?.original_size}
+          resultSize={compareData?.result_size}
+          metrics={compareData?.metrics}
+          accentColor="#22c55e"
+        >
+          {compareData && (
+            <ImageCompareView
+              originalUrl={getAbsoluteUrl(compareData.original_url)}
+              resultUrl={getAbsoluteUrl(compareData.result_url)}
+            />
           )}
-        </Section>
+        </ResultPanel>
+      )}
+
+      {/* In-progress status banner */}
+      {status && status !== "done" && job?.job_id && (
+        <JobStatusPanel status={status} jobId={job.job_id} />
       )}
     </MediaPageLayout>
   )
