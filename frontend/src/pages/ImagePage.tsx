@@ -14,6 +14,15 @@ import { ImageCompareView } from "../components/comparison/ImageCompareView"
 import { MetricsTable } from "../components/metrics/MetricsTable"
 import type { CompareResponse } from "../types/media"
 
+const getAbsoluteUrl = (path: string | undefined | null) => {
+  if (!path) return ""
+  const base = import.meta.env.VITE_API_BASE || "/api/v1"
+  if (base.endsWith("/api/v1") && path.startsWith("/api/v1")) {
+    return `${base}${path.substring(7)}`
+  }
+  return `${base}${path}`
+}
+
 export function ImagePage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [message, setMessage] = useState("")
@@ -23,21 +32,10 @@ export function ImagePage() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [capacity, setCapacity] = useState(0)
   const [compareData, setCompareData] = useState<CompareResponse | null>(null)
-  const [originalUrl, setOriginalUrl] = useState<string>("")
 
   const { upload, progress, isUploading, error: uploadError } = useFileUpload()
   const { status, job, error: pollingError } = useJobPolling(jobId || "")
   const { showToast } = useToast()
-
-  useEffect(() => {
-    if (!selectedFile) {
-      setOriginalUrl("")
-      return
-    }
-    const url = URL.createObjectURL(selectedFile)
-    setOriginalUrl(url)
-    return () => URL.revokeObjectURL(url)
-  }, [selectedFile])
 
   useEffect(() => {
     if (status === "done" && jobId) {
@@ -119,13 +117,13 @@ export function ImagePage() {
             <p className="text-white">Job Status: {status}</p>
             {job && <p className="text-gray-400">Job ID: {job.job_id}</p>}
 
-            {status === "done" && compareData && originalUrl && (
+            {status === "done" && compareData && (
               <div className="mt-4 space-y-6">
                 <div className="border-t border-gray-700 pt-4">
                   <h3 className="text-lg font-semibold text-white mb-3">Comparison</h3>
                   <ImageCompareView
-                    originalUrl={originalUrl}
-                    resultUrl={`${import.meta.env.VITE_API_BASE || "/api/v1"}/jobs/${jobId}/download`}
+                    originalUrl={getAbsoluteUrl(compareData.original_url)}
+                    resultUrl={getAbsoluteUrl(compareData.result_url)}
                   />
                 </div>
                 <div className="border-t border-gray-700 pt-4">

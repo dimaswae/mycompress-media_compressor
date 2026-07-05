@@ -41,4 +41,6 @@ export interface CompareResponse {
   original_size: number
   result_size: number
   metrics: Record<string, number>
+  original_url: string
+  result_url: string
 }

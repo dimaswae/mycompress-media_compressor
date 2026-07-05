@@ -1,5 +1,3 @@
-import React from "react"
-
 type Status = "pending" | "processing" | "done" | "failed" | "deleted"
 
 interface JobStatusBadgeProps {

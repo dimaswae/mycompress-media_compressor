@@ -167,6 +167,8 @@ describe("ImagePage", () => {
         ssim: 0.995,
         mse: 0.5,
       },
+      original_url: "/api/v1/jobs/test-job-id/download/original",
+      result_url: "/api/v1/jobs/test-job-id/download",
     }
     const mockCompareImage = vi.mocked(imageApi.compareImage)
     mockCompareImage.mockResolvedValue(mockCompareResponse)

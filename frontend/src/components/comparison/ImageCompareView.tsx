@@ -1,5 +1,3 @@
-import React from "react"
-
 interface ImageCompareViewProps {
   originalUrl: string
   resultUrl: string

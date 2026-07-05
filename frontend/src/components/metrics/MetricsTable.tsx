@@ -1,5 +1,3 @@
-import React from "react"
-
 interface MetricsTableProps {
   metrics: Record<string, number>
 }
