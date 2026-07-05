@@ -140,3 +140,49 @@ frontend/
 ├── tsconfig.json        # TypeScript configuration options
 └── package.json         # Scripts and project dependencies
 ```
+
+---
+
+## 7. Deployment Instructions
+
+Since `mycompress` is a Single Page Application (SPA) backed by a FastAPI backend, the frontend can be deployed to any static hosting provider. The backend must be hosted separately (e.g., Railway, Render, VPS).
+
+### Option A: Vercel (Recommended)
+Vercel is the easiest option for React apps because it supports SPA routing fallbacks out of the box using a simple configuration file.
+
+1. **Configure Environment Variables**:
+   Set `VITE_API_BASE` in the Vercel Dashboard to your production backend URL, e.g.:
+   `VITE_API_BASE=https://mycompress-api.railway.app/api/v1`
+2. **SPA Routing Fallback**:
+   To prevent `404 Not Found` errors when refreshing the page on subpaths like `/image` or `/jobs`, create a `vercel.json` file in the `frontend/` directory:
+   ```json
+   {
+     "rewrites": [
+       { "source": "/(.*)", "destination": "/index.html" }
+     ]
+   }
+   ```
+3. **Deploy**:
+   Import your repository into Vercel, set the Root Directory to `frontend`, and deploy.
+
+### Option B: GitHub Pages
+Since GitHub Pages hosts project pages in subdirectories (e.g., `https://username.github.io/mycompress-media_compressor/`), you must compile with a base path prefix.
+
+1. **Set Build Variables**:
+   When building, prefix the build command with the repository subdirectory name using `VITE_GH_PAGES_BASE`:
+   ```bash
+   # Windows PowerShell
+   $env:VITE_GH_PAGES_BASE="/mycompress-media_compressor/"; $env:VITE_API_BASE="https://your-api.com/api/v1"; npm run build
+
+   # Linux/macOS Bash
+   VITE_GH_PAGES_BASE="/mycompress-media_compressor/" VITE_API_BASE="https://your-api.com/api/v1" npm run build
+   ```
+2. **Handle SPA Routing on GitHub Pages**:
+   GitHub Pages does not support single-entry fallback rewrites natively. You can either:
+   - Use a custom script like [spa-github-pages](https://github.com/rafgraph/spa-github-pages) (copying `index.html` to `404.html` and adding redirect logic).
+   - Switch your router in `src/router.tsx` to use `createHashRouter` instead of `createBrowserRouter` to use hash-based routing (e.g., `#/image` which is naturally handled by GitHub Pages).
+3. **Deploy using gh-pages CLI**:
+   ```bash
+   npm install --save-dev gh-pages
+   npx gh-pages -d dist
+   ```

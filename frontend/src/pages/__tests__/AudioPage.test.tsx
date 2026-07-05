@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react"
 import { AudioPage } from "../AudioPage"
 import { useFileUpload } from "../../hooks/useFileUpload"
 import { useJobPolling } from "../../hooks/useJobPolling"
+import { ToastProvider } from "../../components/common/ToastContext"
 
 // Mock hooks and APIs
 vi.mock("../../hooks/useFileUpload", () => ({
@@ -28,6 +29,10 @@ vi.mock("../../components/upload/UploadDropzoneNew", () => ({
   ),
 }))
 
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>)
+}
+
 describe("AudioPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -41,7 +46,6 @@ describe("AudioPage", () => {
   })
 
   it("renders upload page and shows progress bar when uploading", () => {
-    // Mock useFileUpload returning progress 45% and uploading
     vi.mocked(useFileUpload).mockReturnValue({
       upload: vi.fn(),
       progress: 45,
@@ -50,7 +54,7 @@ describe("AudioPage", () => {
       result: null,
     } as any)
 
-    render(<AudioPage />)
+    renderWithProviders(<AudioPage />)
 
     expect(screen.getByText("Audio Processing")).toBeInTheDocument()
 
@@ -58,5 +62,20 @@ describe("AudioPage", () => {
     const progressbar = screen.getByRole("progressbar")
     expect(progressbar).toBeInTheDocument()
     expect(progressbar).toHaveAttribute("aria-valuenow", "45")
+  })
+
+  it("renders steganography settings section", () => {
+    vi.mocked(useFileUpload).mockReturnValue({
+      upload: vi.fn(),
+      progress: 0,
+      isUploading: false,
+      error: null,
+      result: null,
+    } as any)
+
+    renderWithProviders(<AudioPage />)
+    expect(screen.getByText("Audio Processing")).toBeInTheDocument()
+    // AES toggle should be present
+    expect(screen.getByText("AES-256 Encryption")).toBeInTheDocument()
   })
 })

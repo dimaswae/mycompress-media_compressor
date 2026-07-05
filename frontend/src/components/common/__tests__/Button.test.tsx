@@ -8,9 +8,9 @@ describe("Button", () => {
     expect(screen.getByText("Click me")).toBeInTheDocument()
   })
 
-  it("shows loading text when isLoading", () => {
+  it("shows 'Processing...' text when isLoading", () => {
     render(<Button isLoading>Click me</Button>)
-    expect(screen.getByText("Loading...")).toBeInTheDocument()
+    expect(screen.getByText("Processing...")).toBeInTheDocument()
   })
 
   it("calls onClick when clicked", () => {
@@ -20,8 +20,13 @@ describe("Button", () => {
     expect(onClick).toHaveBeenCalled()
   })
 
-  it("applies primary classes by default", () => {
+  it("uses 'btn' class by default (design token based)", () => {
     const { container } = render(<Button>Primary</Button>)
-    expect(container.querySelector("button")?.className).toContain("bg-blue-600")
+    expect(container.querySelector("button")?.className).toContain("btn")
+  })
+
+  it("is disabled when isLoading is true", () => {
+    render(<Button isLoading>Click me</Button>)
+    expect(screen.getByRole("button")).toBeDisabled()
   })
 })

@@ -1,7 +1,7 @@
 import React from "react";
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "secondary";
+  variant?: "primary" | "secondary" | "ghost";
   isLoading?: boolean;
 }
 
@@ -9,44 +9,47 @@ export function Button({
   children,
   variant = "primary",
   isLoading,
-  className = "",
+  disabled,
+  style,
   ...props
 }: ButtonProps) {
-  const baseClasses =
-    "px-4 py-2 rounded font-medium transition-colors disabled:opacity-50";
-  const primaryClasses = "bg-blue-600 hover:bg-blue-700 text-white";
-  const secondaryClasses = "bg-gray-600 hover:bg-gray-700 text-white";
+  const variantStyle: React.CSSProperties =
+    variant === "primary"
+      ? { background: "var(--color-primary)", color: "#0F172A" }
+      : variant === "ghost"
+        ? { background: "transparent", color: "var(--color-muted)", border: "1px solid var(--color-border)" }
+        : { background: "var(--color-surface-2)", color: "var(--color-text)", border: "1px solid var(--color-border)" }
 
   return (
     <button
-      className={`${baseClasses} ${variant === "primary" ? primaryClasses : secondaryClasses} ${className}`}
-      disabled={isLoading || props.disabled}
+      className="btn"
+      disabled={isLoading || disabled}
+      style={{
+        ...variantStyle,
+        opacity: isLoading || disabled ? 0.5 : 1,
+        cursor: isLoading || disabled ? "not-allowed" : "pointer",
+        ...style,
+      }}
+      onMouseEnter={(e) => {
+        if (!disabled && !isLoading && variant === "primary") {
+          const el = e.currentTarget
+          el.style.background = "var(--color-primary-h)"
+          el.style.boxShadow = "0 0 16px var(--color-primary-glow)"
+          el.style.transform = "translateY(-1px)"
+        }
+      }}
+      onMouseLeave={(e) => {
+        if (!disabled && !isLoading && variant === "primary") {
+          const el = e.currentTarget
+          el.style.background = "var(--color-primary)"
+          el.style.boxShadow = "none"
+          el.style.transform = "translateY(0)"
+        }
+      }}
       {...props}
     >
-      {isLoading && (
-        <svg
-          className="mr-2 h-4 w-4 animate-spin"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-          aria-hidden
-        >
-          <circle
-            className="opacity-25"
-            cx="12"
-            cy="12"
-            r="10"
-            stroke="currentColor"
-            strokeWidth="4"
-          ></circle>
-          <path
-            className="opacity-75"
-            fill="currentColor"
-            d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-          ></path>
-        </svg>
-      )}
-      <span>{isLoading ? "Loading..." : children}</span>
+      {isLoading && <span className="spinner" aria-hidden />}
+      <span>{isLoading ? "Processing..." : children}</span>
     </button>
   );
 }

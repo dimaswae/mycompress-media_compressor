@@ -1,21 +1,24 @@
 interface UploadProgressProps {
-  percent: number;
+  percent: number
 }
 
 export function UploadProgress({ percent }: UploadProgressProps) {
-  const pct = Math.max(0, Math.min(100, Math.round(percent)));
+  const pct = Math.max(0, Math.min(100, Math.round(percent)))
   return (
-    <div
-      role="progressbar"
-      aria-valuemin={0}
-      aria-valuemax={100}
-      aria-valuenow={pct}
-      className="h-4 w-full rounded-full bg-gray-700"
-    >
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-muted)", fontWeight: 500 }}>Uploading...</span>
+        <span style={{ fontSize: "0.8125rem", color: "var(--color-primary)", fontWeight: 700 }}>{pct}%</span>
+      </div>
       <div
-        className="h-4 rounded-full bg-gradient-to-r from-blue-500 to-teal-400 transition-all"
-        style={{ width: `${pct}%` }}
-      />
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        className="progress-track"
+      >
+        <div className="progress-bar" style={{ width: `${pct}%` }} />
+      </div>
     </div>
-  );
+  )
 }

@@ -3,11 +3,13 @@ import React, { useCallback, useRef, useState } from "react";
 interface UploadDropzoneProps {
   onFileSelect: (file: File) => void;
   accept?: string;
+  selectedFileName?: string | null;
 }
 
 export function UploadDropzone({
   onFileSelect,
   accept = "*",
+  selectedFileName,
 }: UploadDropzoneProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [isDrag, setIsDrag] = useState(false);
@@ -56,20 +58,59 @@ export function UploadDropzone({
     <div
       role="button"
       tabIndex={0}
-      aria-label="Upload file"
+      aria-label="Upload file — click or drag and drop"
       onKeyDown={handleKey}
       onClick={open}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`cursor-pointer rounded-lg border-2 p-6 text-center focus:outline-none focus-visible:ring-2 ${isDrag ? "border-blue-400 bg-gray-800" : "border-gray-600"}`}
+      className={`dropzone${isDrag ? " drag-over" : ""}`}
+      style={{ outline: "none" }}
     >
-      <p className="text-gray-300">Drop files here or press Enter to choose</p>
+      {selectedFileName ? (
+        <>
+          <div style={{
+            width: "2.5rem", height: "2.5rem", borderRadius: "50%",
+            background: "rgba(34,197,94,0.15)", border: "1px solid rgba(34,197,94,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-primary)", marginBottom: "0.75rem",
+          }}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M20 6L9 17l-5-5" /></svg>
+          </div>
+          <p style={{ fontWeight: 600, color: "var(--color-text)", marginBottom: "0.25rem", fontSize: "0.9375rem" }}>
+            {selectedFileName}
+          </p>
+          <p style={{ color: "var(--color-muted)", fontSize: "0.8125rem", margin: 0 }}>
+            Click to change file
+          </p>
+        </>
+      ) : (
+        <>
+          <div style={{
+            width: "2.5rem", height: "2.5rem", borderRadius: "50%",
+            background: "var(--color-surface-2)", border: "1px solid var(--color-border)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "var(--color-muted)", marginBottom: "0.875rem",
+          }}>
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="17 8 12 3 7 8" />
+              <line x1="12" y1="3" x2="12" y2="15" />
+            </svg>
+          </div>
+          <p style={{ fontWeight: 600, color: "var(--color-text)", marginBottom: "0.25rem", fontSize: "0.9375rem" }}>
+            Drop your file here
+          </p>
+          <p style={{ color: "var(--color-muted)", fontSize: "0.8125rem", margin: 0 }}>
+            or <span style={{ color: "var(--color-primary)", fontWeight: 600 }}>click to browse</span>
+          </p>
+        </>
+      )}
       <input
         ref={inputRef}
         id="file-input"
         type="file"
-        className="sr-only"
+        style={{ display: "none" }}
         accept={accept}
         onChange={handleChange}
       />

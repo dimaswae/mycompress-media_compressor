@@ -3,11 +3,22 @@ import { UploadDropzone } from "../components/upload/UploadDropzoneNew"
 import { Button } from "../components/common/Button"
 import { MessageInput } from "../components/stego/MessageInput"
 import { EncryptionToggle } from "../components/stego/EncryptionToggle"
+import { MediaPageLayout, Section, JobStatusPanel } from "../components/common/MediaPageLayout"
 import { useFileUpload } from "../hooks/useFileUpload"
 import { useJobPolling } from "../hooks/useJobPolling"
 import * as videoApi from "../api/videoApi"
 import { ErrorBanner } from "../components/common/ErrorBanner"
 import { UploadProgress } from "../components/upload/UploadProgressNew"
+import { useToast } from "../components/common/ToastContext"
+
+function IconVideo() {
+  return (
+    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polygon points="23 7 16 12 23 17 23 7" />
+      <rect x="1" y="5" width="15" height="14" rx="2" />
+    </svg>
+  )
+}
 
 export function VideoPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
@@ -19,61 +30,89 @@ export function VideoPage() {
 
   const { upload, progress, isUploading, error: uploadError } = useFileUpload()
   const { status, job, error: pollingError } = useJobPolling(jobId || "")
+  const { showToast } = useToast()
 
   const handleUpload = async () => {
     if (!selectedFile) return
     const result = await upload((onProgress) =>
       videoApi.embedMessage(selectedFile, message, encryptEnabled ? password : undefined, onProgress)
     )
-    if (result?.job_id) setJobId(result.job_id)
+    if (result?.job_id) {
+      setJobId(result.job_id)
+      showToast("Video job started", "info")
+    }
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <h1 className="text-2xl font-bold text-white mb-4">Video Processing</h1>
+    <MediaPageLayout
+      title="Video Processing"
+      subtitle="H.264 MP4 compression and I-frame-based steganography"
+      icon={<IconVideo />}
+      accentColor="#a78bfa"
+    >
+      {/* Upload */}
+      <Section title="1. Select MP4 File">
+        <UploadDropzone
+          onFileSelect={setSelectedFile}
+          accept="video/*"
+          selectedFileName={selectedFile?.name}
+        />
+      </Section>
 
-      <div className="space-y-4">
-        <UploadDropzone onFileSelect={setSelectedFile} accept="video/*" />
-
+      {/* Steganography */}
+      <Section title="2. Steganography Settings">
         <MessageInput value={message} onChange={setMessage} />
-
         <EncryptionToggle
           isEnabled={encryptEnabled}
           onToggle={setEncryptEnabled}
           onPasswordChange={setPassword}
         />
+      </Section>
 
-        <label className="flex items-center gap-2 text-white">
-          <span>CRF:</span>
+      {/* CRF slider */}
+      <Section title="3. Compression Quality (CRF)">
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: "0.875rem", color: "var(--color-muted)" }}>
+              CRF <span style={{ color: "var(--color-muted-2)", fontSize: "0.8125rem" }}>(18 = highest quality, 51 = smallest file)</span>
+            </span>
+            <span style={{ fontWeight: 700, color: "var(--color-primary)", fontSize: "1.125rem" }}>{crf}</span>
+          </div>
           <input
-            type="number"
+            type="range"
             min={18}
             max={51}
             value={crf}
             onChange={(e) => setCrf(Number(e.target.value))}
-            className="w-20 bg-gray-800 border border-gray-600 rounded p-1"
+            style={{ width: "100%", accentColor: "var(--color-primary)" }}
+            aria-label="CRF quality value"
           />
-        </label>
-
-        <Button onClick={handleUpload} disabled={!selectedFile || isUploading} isLoading={isUploading}>
-          Embed Message
-        </Button>
-
-        {(uploadError || pollingError) && <ErrorBanner message={uploadError || pollingError || "Unknown error"} />}
-
-        {(isUploading || progress > 0) && (
-          <div className="mt-2">
-            <UploadProgress percent={progress} />
+          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "0.75rem", color: "var(--color-muted-2)" }}>
+            <span>Higher quality</span>
+            <span>Smaller file</span>
           </div>
-        )}
+        </div>
+      </Section>
 
-        {status && (
-          <div className="mt-4 p-4 bg-gray-800 rounded">
-            <p className="text-white">Job Status: {status}</p>
-            {job && <p className="text-gray-400">Job ID: {job.job_id}</p>}
-          </div>
-        )}
-      </div>
-    </div>
+      {/* Submit */}
+      <Button onClick={handleUpload} disabled={!selectedFile || isUploading} isLoading={isUploading}>
+        Embed Message in Video
+      </Button>
+
+      {/* Errors */}
+      {(uploadError || pollingError) && (
+        <ErrorBanner message={uploadError || pollingError || "Unknown error"} />
+      )}
+
+      {/* Upload progress */}
+      {(isUploading || progress > 0) && <UploadProgress percent={progress} />}
+
+      {/* Job result */}
+      {status && (
+        <Section title="Result">
+          <JobStatusPanel status={status} jobId={job?.job_id} />
+        </Section>
+      )}
+    </MediaPageLayout>
   )
 }

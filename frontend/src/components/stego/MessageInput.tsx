@@ -1,25 +1,35 @@
 interface MessageInputProps {
   value: string
   onChange: (value: string) => void
+  placeholder?: string
+  label?: string
   maxLength?: number
 }
 
 export function MessageInput({
   value,
   onChange,
+  placeholder = "Enter secret message...",
+  label = "Hidden Message",
   maxLength = 1000,
 }: MessageInputProps) {
   return (
-    <div className="flex flex-col gap-2">
+    <div style={{ display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+      <label style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--color-muted)" }}>
+        {label}
+      </label>
       <textarea
-        className="w-full bg-gray-800 border border-gray-600 rounded p-2 text-white"
+        className="input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Enter secret message..."
+        placeholder={placeholder}
         rows={4}
+        maxLength={maxLength}
+        style={{ resize: "vertical", minHeight: "5rem", fontFamily: "var(--font-sans)" }}
+        aria-label={label}
       />
-      <span className="text-sm text-gray-400 self-end">
-        {value.length} / {maxLength}
+      <span style={{ fontSize: "0.75rem", color: "var(--color-muted-2)", alignSelf: "flex-end" }}>
+        {value.length} / {maxLength} chars
       </span>
     </div>
   )

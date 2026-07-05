@@ -44,7 +44,7 @@ describe("JobHistoryPage", () => {
     })
 
     // Verify headings
-    expect(screen.getByText("ID")).toBeInTheDocument()
+    expect(screen.getByText("Job ID")).toBeInTheDocument()
     expect(screen.getByText("Type")).toBeInTheDocument()
     expect(screen.getByText("Operation")).toBeInTheDocument()
     expect(screen.getByText("Status")).toBeInTheDocument()

@@ -3,6 +3,7 @@ import { render, screen } from "@testing-library/react"
 import { VideoPage } from "../VideoPage"
 import { useFileUpload } from "../../hooks/useFileUpload"
 import { useJobPolling } from "../../hooks/useJobPolling"
+import { ToastProvider } from "../../components/common/ToastContext"
 
 // Mock hooks and APIs
 vi.mock("../../hooks/useFileUpload", () => ({
@@ -28,6 +29,10 @@ vi.mock("../../components/upload/UploadDropzoneNew", () => ({
   ),
 }))
 
+function renderWithProviders(ui: React.ReactElement) {
+  return render(<ToastProvider>{ui}</ToastProvider>)
+}
+
 describe("VideoPage", () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -41,7 +46,6 @@ describe("VideoPage", () => {
   })
 
   it("renders upload page and shows progress bar when uploading", () => {
-    // Mock useFileUpload returning progress 60% and uploading
     vi.mocked(useFileUpload).mockReturnValue({
       upload: vi.fn(),
       progress: 60,
@@ -50,7 +54,7 @@ describe("VideoPage", () => {
       result: null,
     } as any)
 
-    render(<VideoPage />)
+    renderWithProviders(<VideoPage />)
 
     expect(screen.getByText("Video Processing")).toBeInTheDocument()
 
@@ -58,5 +62,18 @@ describe("VideoPage", () => {
     const progressbar = screen.getByRole("progressbar")
     expect(progressbar).toBeInTheDocument()
     expect(progressbar).toHaveAttribute("aria-valuenow", "60")
+  })
+
+  it("renders CRF slider", () => {
+    vi.mocked(useFileUpload).mockReturnValue({
+      upload: vi.fn(),
+      progress: 0,
+      isUploading: false,
+      error: null,
+      result: null,
+    } as any)
+
+    renderWithProviders(<VideoPage />)
+    expect(screen.getByRole("slider")).toBeInTheDocument()
   })
 })

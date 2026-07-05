@@ -100,7 +100,7 @@ describe("ImagePage", () => {
 
     // Now enable encryption: checkbox toggle
     // It should subtract 44 bytes -> 22496 - 44 = 22452 bytes.
-    const encryptCheckbox = screen.getByLabelText(/Enable AES Encryption/i)
+    const encryptCheckbox = screen.getByRole("switch")
     fireEvent.click(encryptCheckbox)
 
     await waitFor(() => {
