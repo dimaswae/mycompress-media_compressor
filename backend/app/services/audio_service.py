@@ -201,7 +201,9 @@ def embed_message(
 
             encrypted = encrypt_bytes(message_bytes, password)
             salt_hex = encrypted[:16].hex()
-            message_bytes = encrypted
+            message_bytes = b"\x01" + encrypted
+        else:
+            message_bytes = b"\x00" + message_bytes
 
         codec = AudioLsbCodec()
         result_bytes, embed_ms = processing_time(codec.embed, file_bytes, message_bytes)
@@ -270,12 +272,23 @@ def extract_message(
         codec = AudioLsbCodec()
         extracted_bytes, extract_ms = processing_time(codec.extract, file_bytes)
 
-        if password:
+        if not extracted_bytes:
+            from app.utils.exceptions import DecryptionError
+            raise DecryptionError("Extracted payload is empty or invalid")
+
+        is_encrypted = extracted_bytes[0] == 1
+        payload_bytes = extracted_bytes[1:]
+
+        if is_encrypted and not password:
+            from app.utils.exceptions import DecryptionError
+            raise DecryptionError("Message is encrypted, password is required")
+
+        if is_encrypted:
             from app.core.security.aes_cipher import decrypt_bytes
 
-            extracted_bytes = decrypt_bytes(extracted_bytes, password)
+            payload_bytes = decrypt_bytes(payload_bytes, password)
 
-        message_str = extracted_bytes.decode("utf-8", errors="replace")
+        message_str = payload_bytes.decode("utf-8", errors="replace")
 
         update_job_status(db, job_id, status="done")
 

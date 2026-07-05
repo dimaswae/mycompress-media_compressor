@@ -237,7 +237,9 @@ def embed_message(
             encrypted = encrypt_bytes(message_bytes, password)
             # Salt is the first 16 bytes of the encrypted payload (for auditing)
             salt_hex = encrypted[:16].hex()
-            message_bytes = encrypted
+            message_bytes = b"\x01" + encrypted
+        else:
+            message_bytes = b"\x00" + message_bytes
 
         lsb = LsbCodec()
         result_img, embed_ms = processing_time(lsb.embed, file_bytes, message_bytes)
@@ -311,21 +313,32 @@ def extract_message(
         lsb = LsbCodec()
         extracted_bytes, extract_ms = processing_time(lsb.extract, file_bytes)
 
-        if password:
+        if not extracted_bytes:
+            from app.utils.exceptions import DecryptionError
+            raise DecryptionError("Extracted payload is empty or invalid")
+
+        is_encrypted = extracted_bytes[0] == 1
+        payload_bytes = extracted_bytes[1:]
+
+        if is_encrypted and not password:
+            from app.utils.exceptions import DecryptionError
+            raise DecryptionError("Message is encrypted, password is required")
+
+        if is_encrypted:
             from app.core.security.aes_cipher import decrypt_bytes
 
-            extracted_bytes = decrypt_bytes(extracted_bytes, password)
+            payload_bytes = decrypt_bytes(payload_bytes, password)
 
         if algorithm:
             codec = get_codec(algorithm)
-            extracted_bytes, decompress_ms = processing_time(
-                codec.decompress, extracted_bytes
+            payload_bytes, decompress_ms = processing_time(
+                codec.decompress, payload_bytes
             )
         else:
             decompress_ms = 0.0
 
         total_time = extract_ms + decompress_ms
-        message_str = extracted_bytes.decode("utf-8", errors="replace")
+        message_str = payload_bytes.decode("utf-8", errors="replace")
 
         update_job_status(db, job_id, status="done")
 
