@@ -18,3 +18,13 @@ openapi.json
 .idea/
 *.swp
 *.swo
+
+# Internal agentic working docs (not part of public deliverable)
+AGENTS.md
+ARCHITECTURE.md
+BACKEND_ARCHITECTURE.md
+MILESTONE.md
+PROJECT_SPEC.md
+PROMPTS.md
+ROADMAP_MVP.md
+TASKS.md
