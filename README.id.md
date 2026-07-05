@@ -38,6 +38,25 @@ Aplikasi ini berhasil memecahkan dilema mendasar dalam pemrosesan media: penerap
 <!-- TODO: Capture screenshot antarmuka UI terbaru yang menampilkan Mode Selector tab (Compress vs Stego) serta panel detil teknis collapsible. Simpan di /docs/assets/ui_screenshot.png -->
 ![MyCompress UI Interface](./docs/assets/ui_screenshot.png)
 
+### 🖼️ Image Processor Page
+<!-- TODO: Dokumentasikan alur pemrosesan gambar di bawah ini -->
+![MyCompress Image Processor Interface](./docs/assets/image_processor.png)
+
+**Fitur Utama:** Kompresi gambar (JPEG, PNG, WebP) dan penyisipan pesan rahasia (Steganografi LSB).
+
+### 🎵 Audio Processor Page
+<!-- TODO: Dokumentasikan alur pemrosesan audio di bawah ini -->
+![MyCompress Audio Processor Interface](./docs/assets/audio_processor.png)
+
+**Fitur Utama:** Reduksi bitrate audio (MP3, WAV) dan enkripsi audio berbasis kunci.
+
+
+### 🎥 Video Processor Page
+<!-- TODO: Dokumentasikan alur pemrosesan video di bawah ini -->
+![MyCompress Video Processor Interface](./docs/assets/video_processor.png)
+
+**Fitur Utama:** Transcoding video (H.264/H.265), pengaturan resolusi, dan kompresi audio track.
+
 ---
 
 ## 🛠️ Tech Stack & Spesifikasi Modul
